@@ -124,6 +124,28 @@ body {
 .view-header { margin: 4px 0 16px; }
 .view-header h2 { margin: 0 0 4px; font-size: 24px; letter-spacing: -.02em; }
 .view-header p { margin: 0; max-width: 62ch; }
+.view-header-row { display: flex; align-items: center; gap: 10px; }
+.help-btn {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+  font-weight: 800; font-size: 13px; cursor: pointer; line-height: 1;
+}
+.help-btn:hover { border-color: var(--accent); color: var(--accent-dark); }
+.help-body p { margin: 0 0 10px; }
+.help-body ul { margin: 4px 0 12px; padding-left: 18px; }
+.help-body li { margin-bottom: 6px; }
+.over-note { color: var(--warn); font-weight: 600; }
+
+/* profile summary (collapsed) */
+.summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 16px; margin-top: 6px; }
+.summary-item { display: flex; flex-direction: column; gap: 1px; }
+.summary-key { font-size: 12px; color: var(--muted); }
+.summary-val { font-weight: 600; }
+
+/* compare modal context + colored cells */
+.compare-context { margin-bottom: 12px; font-size: 13px; }
+.compare-table td.pos { color: var(--accent-dark); font-weight: 700; }
+.compare-table td.neg { color: var(--danger); font-weight: 700; }
 
 .card {
   background: var(--surface);
@@ -339,6 +361,8 @@ textarea.input { resize: vertical; }
 .toast.err { background: var(--danger); color: #fff; }
 
 .site-foot { max-width: var(--maxw); margin: 0 auto; padding: 18px 20px 30px; color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.link-btn { align-self: flex-start; margin-bottom: 8px; font: inherit; font-size: 13px; font-weight: 600; padding: 7px 13px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--accent-dark); cursor: pointer; }
+.link-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
 
 /* ----------------------------------------------------------- modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 1100; padding: 20px; animation: fade .15s ease; }

@@ -37,7 +37,8 @@ The app needs to be served over HTTP (browser geolocation and the map APIs requi
 
 ```bash
 cd "Macro Map"
-python -m http.server 8000
+python scripts/dev_server.py        # no-cache dev server on port 8000
+# (or: python -m http.server 8000 — but the browser may cache stale JS/CSS)
 ```
 
 Then open <http://localhost:8000> in your browser. `localhost` counts as a secure context, so "Use my location" works.

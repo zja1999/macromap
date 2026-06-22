@@ -68,14 +68,55 @@ window.MM.data = (function () {
     });
   }
 
-  // Submit a chain-data request: always kept locally for the user's list, and
-  // pushed to the central data_requests table when Supabase is configured.
+  /* ---- client-side request spam protection ----
+   * Deters casual abuse: validates input, blocks duplicates, and rate-limits.
+   * Note: this is best-effort client-side throttling — the anon insert endpoint
+   * is still open, so a determined actor could bypass it. Stronger protection
+   * would need a Supabase Edge Function or per-IP limiting in front of the API. */
+  var RL_KEY = "macromap.reqlog";
+  function reqLog() {
+    try { return JSON.parse(localStorage.getItem(RL_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function throttleCheck() {
+    var now = Date.now();
+    var log = reqLog().filter(function (t) { return now - t < 86400000; }); // last 24h
+    if (log.length && now - log[log.length - 1] < 8000)
+      return { ok: false, reason: "Easy there — wait a few seconds before requesting again." };
+    if (log.filter(function (t) { return now - t < 600000; }).length >= 8)
+      return { ok: false, reason: "That's a lot of requests at once. Try again in a few minutes." };
+    if (log.length >= 25)
+      return { ok: false, reason: "You've hit the daily request limit. Thanks for the suggestions!" };
+    return { ok: true };
+  }
+  function recordSubmission() {
+    var log = reqLog(); log.push(Date.now());
+    try { localStorage.setItem(RL_KEY, JSON.stringify(log)); } catch (e) { /* quota */ }
+  }
+
+  // Submit a chain-data request: validated + throttled, kept locally for the
+  // user's list, and pushed to the central data_requests table when configured.
+  // Rejects with a friendly Error when blocked.
   function submitRequest(req) {
-    var local = window.MM.store.addRequest({ chain: req.chain, note: req.note, lat: req.lat, lng: req.lng });
+    var chain = (req.chain || "").trim();
+    if (chain.length < 2) return Promise.reject(new Error("Please enter a valid restaurant name."));
+    if (chain.length > 80) chain = chain.slice(0, 80);
+    var note = (req.note || "").trim().slice(0, 280);
+
+    // Don't let the same place be requested twice from this browser.
+    var already = window.MM.store.getRequests().some(function (r) {
+      return (r.chain || "").trim().toLowerCase() === chain.toLowerCase();
+    });
+    if (already) return Promise.reject(new Error("You've already requested \"" + chain + "\"."));
+
+    var rl = throttleCheck();
+    if (!rl.ok) return Promise.reject(new Error(rl.reason));
+    recordSubmission();
+
+    var local = window.MM.store.addRequest({ chain: chain, note: note, lat: req.lat, lng: req.lng });
     if (!enabled()) return Promise.resolve(local);
     var user = window.MM.auth && window.MM.auth.currentUser && window.MM.auth.currentUser();
     var payload = {
-      chain: req.chain, note: req.note || null,
+      chain: chain, note: note || null,
       lat: req.lat || null, lng: req.lng || null,
       user_id: user ? user.id : null
     };
@@ -92,7 +133,48 @@ window.MM.data = (function () {
     });
   }
 
+  /* ---- user feedback ---- */
+  var FB_KEY = "macromap.fblog";
+  function fbLog() { try { return JSON.parse(localStorage.getItem(FB_KEY) || "[]"); } catch (e) { return []; } }
+  function fbThrottle() {
+    var now = Date.now();
+    var log = fbLog().filter(function (t) { return now - t < 86400000; });
+    if (log.length && now - log[log.length - 1] < 5000)
+      return { ok: false, reason: "Give it a moment before sending more." };
+    if (log.length >= 15)
+      return { ok: false, reason: "Thanks for all the feedback today! Try again tomorrow." };
+    return { ok: true };
+  }
+
+  // Send user feedback to the central `feedback` table. Validated + throttled.
+  function submitFeedback(fb) {
+    var msg = (fb.message || "").trim();
+    if (msg.length < 4) return Promise.reject(new Error("Please add a little more detail."));
+    msg = msg.slice(0, 1000);
+    if (!enabled()) return Promise.reject(new Error("Feedback needs the app's cloud connection."));
+    var t = fbThrottle();
+    if (!t.ok) return Promise.reject(new Error(t.reason));
+    var log = fbLog(); log.push(Date.now());
+    try { localStorage.setItem(FB_KEY, JSON.stringify(log)); } catch (e) { /* quota */ }
+
+    var user = window.MM.auth && window.MM.auth.currentUser && window.MM.auth.currentUser();
+    var payload = {
+      message: msg,
+      category: fb.category || null,
+      context: fb.context || null,
+      user_id: user ? user.id : null
+    };
+    return fetch(cfg().supabaseUrl + "/rest/v1/feedback", {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json", Prefer: "return=minimal" }, headers()),
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+      return true;
+    });
+  }
+
   applyCache();
 
-  return { loadNutrition: loadNutrition, submitRequest: submitRequest };
+  return { loadNutrition: loadNutrition, submitRequest: submitRequest, submitFeedback: submitFeedback };
 })();

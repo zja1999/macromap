@@ -16,7 +16,8 @@ window.MM.app = (function () {
     selectedChainId: null,   // chain shown in Menu view
     nearbyPlaces: [],        // last Overpass results
     viewDate: window.MM.store.todayKey(),
-    compare: []              // items selected for comparison in Menu view
+    compare: [],             // items selected for comparison in Menu view
+    profileEditing: false    // whether the profile form is expanded for editing
   };
 
   var VIEWS = [
@@ -27,6 +28,20 @@ window.MM.app = (function () {
     { id: "tracker",   label: "Tracker",   icon: "📊" },
     { id: "requests",  label: "Add Data",  icon: "➕" }
   ];
+
+  // Fitness-goal ordering by weight goal, so the most relevant focus is the
+  // default (and listed first) instead of always "Fat loss / cutting".
+  var FOCUS_PRIORITY = {
+    lose:     ["fat_loss", "recomp", "general", "endurance", "muscle"],
+    gain:     ["muscle", "recomp", "endurance", "general", "fat_loss"],
+    maintain: ["recomp", "general", "endurance", "muscle", "fat_loss"]
+  };
+  function focusOptionsFor(goal) {
+    var FOCUS = window.MM.macros.FOCUS;
+    var order = FOCUS_PRIORITY[goal] || Object.keys(FOCUS);
+    return order.filter(function (k) { return FOCUS[k]; })
+      .map(function (k) { return { v: k, label: FOCUS[k].label }; });
+  }
 
   /* ---------------------------------------------------------------- helpers */
 
@@ -73,8 +88,11 @@ window.MM.app = (function () {
       sodium: item.sodium || 0, fiber: item.fiber || 0, sugar: item.sugar || 0,
       qty: qty || 1
     };
-    window.MM.store.addLogEntry(entry, window.MM.store.todayKey());
-    ui.toast("Added " + item.name + " to today's log", "ok");
+    // Log to the day currently being viewed in the Tracker (defaults to today),
+    // so you can backfill previous days too.
+    window.MM.store.addLogEntry(entry, state.viewDate);
+    var where = state.viewDate === window.MM.store.todayKey() ? "today's log" : prettyDate(state.viewDate);
+    ui.toast("Added " + item.name + " to " + where, "ok");
     renderTracker();
     renderNavBadge();
   }
@@ -133,7 +151,20 @@ window.MM.app = (function () {
     var root = document.getElementById("view-profile");
     ui.clear(root);
     var m = window.MM.macros;
-    var p = window.MM.store.getProfile() || {
+    var saved = window.MM.store.getProfile();
+    var savedTargets = window.MM.store.getTargets();
+
+    // Once set up, collapse to a summary (things like height rarely change) and
+    // let the user expand to edit. New users see the full form.
+    if (saved && savedTargets && !state.profileEditing) {
+      root.appendChild(header("Your nutrition profile",
+        "Your targets are set. Edit anytime as your weight or goals change."));
+      root.appendChild(targetsCard(savedTargets, saved));
+      root.appendChild(profileSummaryCard(saved));
+      return;
+    }
+
+    var p = saved || {
       age: 30, sex: "male", heightCm: 178, weightKg: m.lbToKg(175),
       units: "imperial", activity: "moderate", goal: "lose", rate: "0.5", focus: "fat_loss"
     };
@@ -191,24 +222,42 @@ window.MM.app = (function () {
 
     form.appendChild(field("Weight goal", select("goal",
       Object.keys(m.GOALS).map(function (k) { return { v: k, label: m.GOALS[k].label }; }), p.goal,
-      function () { toggleRate(); })));
+      onGoalChange)));
 
-    var rateField = field("Rate of progress", select("rate",
-      Object.keys(m.RATES).map(function (k) { return { v: k, label: m.RATES[k].label }; }), p.rate));
+    // Order rates numerically (object-key order would float "1" to the front).
+    var rateOpts = Object.keys(m.RATES)
+      .sort(function (a, b) { return parseFloat(a) - parseFloat(b); })
+      .map(function (k) { return { v: k, label: m.RATES[k].label }; });
+    var rateField = field("Rate of progress", select("rate", rateOpts, p.rate));
     form.appendChild(rateField);
 
-    form.appendChild(field("Fitness goal", select("focus",
-      Object.keys(m.FOCUS).map(function (k) { return { v: k, label: m.FOCUS[k].label }; }), p.focus), "span2"));
+    var focusSelect = select("focus", focusOptionsFor(p.goal), p.focus);
+    form.appendChild(field("Fitness goal", focusSelect, "span2"));
 
-    function toggleRate() {
+    function updateRateVisibility() {
       var goal = form.querySelector('select[name="goal"]').value;
       rateField.style.display = goal === "maintain" ? "none" : "";
     }
-    toggleRate();
+    // When the weight goal changes, reorder fitness goals by relevance and
+    // default to the most fitting one (e.g. "Build muscle" when gaining).
+    function onGoalChange() {
+      updateRateVisibility();
+      var opts = focusOptionsFor(form.querySelector('select[name="goal"]').value);
+      ui.clear(focusSelect);
+      opts.forEach(function (o) { focusSelect.appendChild(el("option", { value: o.v }, o.label)); });
+      focusSelect.value = opts[0].v;
+    }
+    updateRateVisibility();
 
-    form.appendChild(el("div", { class: "span2 form-actions" }, [
-      el("button", { class: "btn primary", type: "submit" }, "Calculate my targets")
-    ]));
+    var actions = el("div", { class: "span2 form-actions" }, [
+      el("button", { class: "btn primary", type: "submit" }, saved ? "Save changes" : "Calculate my targets")
+    ]);
+    if (saved) {
+      actions.appendChild(el("button", { class: "btn ghost", type: "button", onclick: function () {
+        state.profileEditing = false; renderProfile();
+      } }, "Cancel"));
+    }
+    form.appendChild(actions);
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -216,16 +265,13 @@ window.MM.app = (function () {
       window.MM.store.setProfile(prof);
       var t = m.compute(prof);
       window.MM.store.setTargets(t);
+      state.profileEditing = false;
       ui.toast("Targets saved to your profile", "ok");
       renderProfile();
       renderNavBadge();
     });
 
     root.appendChild(form);
-
-    // current targets card
-    var t = window.MM.store.getTargets();
-    if (t) root.appendChild(targetsCard(t, p));
   }
 
   function readProfileForm(form) {
@@ -280,6 +326,41 @@ window.MM.app = (function () {
         window.MM.app.navigate("discover");
       } }, "Find food nearby →")
     ]));
+    return card;
+  }
+
+  function profileSummaryCard(p) {
+    var m = window.MM.macros;
+    var ht, wt;
+    if (p.units === "metric") {
+      ht = Math.round(p.heightCm) + " cm";
+      wt = Math.round(p.weightKg) + " kg";
+    } else {
+      var ti = m.cmToIn(p.heightCm), ft = Math.floor(ti / 12);
+      ht = ft + "'" + Math.round(ti - ft * 12) + "\"";
+      wt = Math.round(m.kgToLb(p.weightKg)) + " lb";
+    }
+    function lbl(map, k) { return map[k] ? map[k].label : k; }
+    var pairs = [
+      ["Age", p.age], ["Sex", p.sex === "female" ? "Female" : "Male"],
+      ["Height", ht], ["Weight", wt],
+      ["Activity", lbl(m.ACTIVITY, p.activity)],
+      ["Weight goal", lbl(m.GOALS, p.goal)],
+      ["Fitness goal", lbl(m.FOCUS, p.focus)]
+    ];
+    if (p.goal !== "maintain") pairs.splice(6, 0, ["Rate", lbl(m.RATES, p.rate)]);
+
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { class: "targets-head" }, [
+      el("h3", null, "Profile"),
+      el("button", { class: "btn small", onclick: function () { state.profileEditing = true; renderProfile(); } }, "Edit profile")
+    ]));
+    card.appendChild(el("div", { class: "summary-grid" }, pairs.map(function (kv) {
+      return el("div", { class: "summary-item" }, [
+        el("div", { class: "summary-key" }, kv[0]),
+        el("div", { class: "summary-val" }, String(kv[1]))
+      ]);
+    })));
     return card;
   }
 
@@ -436,8 +517,10 @@ window.MM.app = (function () {
     window.MM.data.submitRequest({
       chain: place.name, note: "Requested from Discover (no data found nearby)",
       lat: place.lat, lng: place.lng
-    });
-    ui.toast("Requested macro data for " + place.name, "ok");
+    }).then(function () {
+      ui.toast("Requested macro data for " + place.name, "ok");
+      if (state.view === "requests") renderRequests();
+    }).catch(function (e) { ui.toast(e.message, "err"); });
   }
 
   /* =====================================================================
@@ -447,7 +530,8 @@ window.MM.app = (function () {
   function renderMenu() {
     var root = document.getElementById("view-menu");
     ui.clear(root);
-    root.appendChild(header("Browse menus", "Compare items by macros. Add anything straight to today's log."));
+    root.appendChild(header("Browse menus", "Compare items by macros. Add anything straight to your log.",
+      helpBtn("Reading the menu", menuHelp())));
 
     var chains = window.MM.NUTRITION;
     var nearbyIds = availableChainIds();
@@ -549,7 +633,10 @@ window.MM.app = (function () {
         el("span", null, "Compare")
       ]),
       el("div", { class: "item-actions" }, [
-        rem ? el("span", { class: "muted small" }, fits ? "fits remaining" : "over remaining") : null,
+        rem ? el("span", {
+          class: "muted small" + (fits ? "" : " over-note"),
+          title: "Compared to the calories you have left today (" + ui.fmt(rem.kcal) + " cal)"
+        }, fits ? ui.fmt(rem.kcal - it.kcal) + " cal left after" : "over by " + ui.fmt(it.kcal - rem.kcal) + " cal") : null,
         el("button", { class: "btn small primary", onclick: function () { addToLog(it, 1); } }, "Add")
       ])
     ]);
@@ -586,7 +673,12 @@ window.MM.app = (function () {
 
   function openCompare() {
     if (!state.compare.length) return;
+    var tg = window.MM.store.getTargets();
+    var rem = remaining();
+
     var rows = ["Calories", "Protein (g)", "Carbs (g)", "Fat (g)", "Sodium (mg)", "Sugar (g)", "P / 100 cal"];
+    if (rem) rows.push("Cal left after");
+
     var table = el("table", { class: "compare-table" });
     var thead = el("tr", null, [el("th", null, "")].concat(state.compare.map(function (it) {
       return el("th", null, it.name);
@@ -595,19 +687,33 @@ window.MM.app = (function () {
     rows.forEach(function (label) {
       var tr = el("tr", null, [el("td", { class: "rowlab" }, label)]);
       state.compare.forEach(function (it) {
-        var v;
+        var v, cls = "";
         if (label === "Calories") v = ui.fmt(it.kcal);
         else if (label === "Protein (g)") v = ui.fmt(it.protein);
         else if (label === "Carbs (g)") v = ui.fmt(it.carbs);
         else if (label === "Fat (g)") v = ui.fmt(it.fat);
         else if (label === "Sodium (mg)") v = ui.fmt(it.sodium);
         else if (label === "Sugar (g)") v = ui.fmt(it.sugar);
-        else v = (it.kcal > 0 ? (it.protein / it.kcal * 100).toFixed(1) : "—");
-        tr.appendChild(el("td", null, String(v)));
+        else if (label === "P / 100 cal") v = (it.kcal > 0 ? (it.protein / it.kcal * 100).toFixed(1) : "—");
+        else { // Cal left after
+          var left = rem.kcal - it.kcal;
+          v = (left < 0 ? "−" : "") + ui.fmt(Math.abs(left));
+          cls = left < 0 ? "neg" : "pos";
+        }
+        tr.appendChild(el("td", { class: cls }, String(v)));
       });
       table.appendChild(tr);
     });
-    ui.modal("Compare items", el("div", { class: "compare-scroll" }, [table]), [{ label: "Done", kind: "primary" }]);
+
+    var content = [];
+    if (tg && rem) {
+      content.push(el("div", { class: "compare-context" }, [
+        el("span", { class: "muted" }, "Today: target " + ui.fmt(tg.kcal) + " · " + ui.fmt(tg.kcal - rem.kcal) + " eaten · "),
+        el("strong", null, ui.fmt(rem.kcal) + " cal left")
+      ]));
+    }
+    content.push(el("div", { class: "compare-scroll" }, [table]));
+    ui.modal("Compare items", el("div", null, content), [{ label: "Done", kind: "primary" }]);
   }
 
   /* =====================================================================
@@ -617,7 +723,8 @@ window.MM.app = (function () {
   function renderRecommend() {
     var root = document.getElementById("view-recommend");
     ui.clear(root);
-    root.appendChild(header("Recommended for you", "Picks ranked by how well they fit your remaining macros today."));
+    root.appendChild(header("Recommended for you", "Picks ranked by how well they fit your remaining macros today.",
+      helpBtn("How recommendations work", recommendHelp())));
 
     var tg = window.MM.store.getTargets();
     if (!tg) {
@@ -970,9 +1077,10 @@ window.MM.app = (function () {
       window.MM.data.submitRequest({
         chain: nameInput.value.trim(), note: noteInput.value.trim(),
         lat: cur ? cur.lat : null, lng: cur ? cur.lng : null
-      });
-      ui.toast("Request submitted — thank you!", "ok");
-      renderRequests();
+      }).then(function () {
+        ui.toast("Request submitted — thank you!", "ok");
+        renderRequests();
+      }).catch(function (e) { ui.toast(e.message, "err"); });
     });
     root.appendChild(form);
 
@@ -998,11 +1106,18 @@ window.MM.app = (function () {
 
   /* ------------------------------------------------------ small builders */
 
-  function header(title, sub) {
+  function header(title, sub, help) {
     return el("div", { class: "view-header" }, [
-      el("h2", null, title),
+      el("div", { class: "view-header-row" }, [el("h2", null, title), help || null]),
       sub ? el("p", { class: "muted" }, sub) : null
     ]);
+  }
+  // A small "?" button that opens an explanatory modal.
+  function helpBtn(title, bodyNode) {
+    return el("button", {
+      class: "help-btn", "aria-label": "How this works", title: "How this works",
+      onclick: function () { ui.modal(title, bodyNode, [{ label: "Got it", kind: "primary" }]); }
+    }, "?");
   }
   function field(label, control, cls) {
     return el("div", { class: "field " + (cls || "") }, [el("label", null, label), control]);
@@ -1054,6 +1169,31 @@ window.MM.app = (function () {
       "</svg>" });
   }
   function emptyHint(text) { return el("div", { class: "empty-hint" }, text); }
+
+  // ----- help content -----
+  function recommendHelp() {
+    return el("div", { class: "help-body" }, [
+      el("p", null, "Every nearby item gets a fit score (higher = better) based on how well it matches what you still have room for today."),
+      el("p", { class: "section-label" }, "What goes into the score"),
+      el("ul", null, [
+        el("li", { html: "<b>Protein per calorie</b> — the biggest factor. More protein for fewer calories scores higher (shown as “g protein / 100 cal”)." }),
+        el("li", { html: "<b>Fits your remaining calories</b> — items that use a sensible share of the calories you have left score well; going over is penalized." }),
+        el("li", { html: "<b>Covers protein left</b> — items that help close your remaining protein gap get a boost." }),
+        el("li", { html: "<b>Carb / fat budgets, meal size & your “Prioritize” choice</b> — nudge the score up or down." })
+      ]),
+      el("p", { class: "section-label" }, "Badges" ),
+      el("p", { html: "<b>Fits remaining calories</b> means the item is at or under the calories you have left today (target minus what you've logged). <b>High protein per calorie</b> flags especially efficient picks." }),
+      el("p", { class: "muted small" }, "Scores are a guide to compare options, not an exact grade.")
+    ]);
+  }
+  function menuHelp() {
+    return el("div", { class: "help-body" }, [
+      el("p", { html: "<b>“… cal left after”</b> shows where an item puts you against the calories you have left today (your target minus what you've already logged). If it would put you over, it shows how far." }),
+      el("p", { html: "<b>Sort by “protein per calorie”</b> ranks items by how much protein you get per calorie — handy for high-protein, lower-calorie picks." }),
+      el("p", { html: "Flags: <b>High protein</b> (efficient protein), <b>Lower cal</b> (≤ 400 cal), plus <b>High sodium / sugar</b> warnings." }),
+      el("p", { html: "Tick <b>Compare</b> on a few items to see them side by side, including how each affects your remaining calories." })
+    ]);
+  }
   function noticeCard(title, body, btn, onClick) {
     return el("div", { class: "card notice" }, [
       el("h3", null, title), el("p", { class: "muted" }, body),
@@ -1197,6 +1337,33 @@ window.MM.app = (function () {
     function applyModeKeepMsg() { submitBtn.textContent = mode === "signin" ? "Sign in" : "Create account"; }
   }
 
+  /* ------------------------------------------------------------- feedback */
+
+  function openFeedbackModal() {
+    var cat = select("fb_cat", [
+      { v: "general", label: "General feedback" },
+      { v: "idea", label: "Feature idea" },
+      { v: "bug", label: "Bug report" }
+    ], "general");
+    var msg = el("textarea", { class: "input", rows: "4", maxlength: "1000",
+      placeholder: "What's working, what's not, what you'd love to see…" });
+    var note = el("div", { class: "auth-msg" });
+    var body = el("div", { class: "form-grid" }, [
+      field("Type", cat, "span2"),
+      field("Your feedback", msg, "span2"),
+      note
+    ]);
+    var close = ui.modal("Send feedback", body, [
+      { label: "Cancel", kind: "ghost" },
+      { label: "Send", kind: "primary", onClick: function () {
+        window.MM.data.submitFeedback({ message: msg.value, category: cat.value, context: state.view })
+          .then(function () { ui.toast("Thanks for the feedback!", "ok"); close(); })
+          .catch(function (e) { note.textContent = e.message; note.className = "auth-msg err"; });
+        return true; // keep open; close manually on success
+      } }
+    ]);
+  }
+
   /* ------------------------------------------------------------- bootstrap */
 
   function start() {
@@ -1218,6 +1385,9 @@ window.MM.app = (function () {
     window.MM.data.loadNutrition(function () {
       if (state.view === "menu" || state.view === "recommend") refreshCurrent();
     });
+
+    var fb = document.getElementById("feedback-link");
+    if (fb) fb.addEventListener("click", openFeedbackModal);
   }
 
   return {
