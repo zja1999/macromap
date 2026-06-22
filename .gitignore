@@ -1,3 +1,7 @@
+# Secrets — NEVER commit the service-role key
+.env
+.env.local
+
 # Local tooling / editor / OS cruft
 .claude/
 .vscode/

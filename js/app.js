@@ -433,7 +433,7 @@ window.MM.app = (function () {
   }
 
   function quickRequest(place) {
-    window.MM.store.addRequest({
+    window.MM.data.submitRequest({
       chain: place.name, note: "Requested from Discover (no data found nearby)",
       lat: place.lat, lng: place.lng
     });
@@ -967,7 +967,7 @@ window.MM.app = (function () {
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var cur = window.MM.map.getCurrent();
-      window.MM.store.addRequest({
+      window.MM.data.submitRequest({
         chain: nameInput.value.trim(), note: noteInput.value.trim(),
         lat: cur ? cur.lat : null, lng: cur ? cur.lng : null
       });
@@ -1212,6 +1212,12 @@ window.MM.app = (function () {
       refreshCurrent();
     });
     window.MM.auth.init();
+
+    // Pull the shared nutrition database from Supabase (falls back to bundled
+    // data). When it arrives, refresh the chain-dependent views in place.
+    window.MM.data.loadNutrition(function () {
+      if (state.view === "menu" || state.view === "recommend") refreshCurrent();
+    });
   }
 
   return {

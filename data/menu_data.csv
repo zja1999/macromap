@@ -1,0 +1,112 @@
+chain_id,chain_name,chain_color,match,name,category,kcal,protein,carbs,fat,sodium,fiber,sugar
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Hamburger,Burgers,250,12,31,9,510,1,6
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Cheeseburger,Burgers,300,15,32,13,720,2,7
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Double Cheeseburger,Burgers,450,25,34,24,1050,2,7
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Quarter Pounder w/ Cheese,Burgers,520,30,42,26,1140,3,10
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Big Mac,Burgers,590,25,46,34,1050,3,9
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,McChicken,Chicken,400,14,39,21,600,2,5
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,McDouble,Burgers,400,22,33,20,920,2,7
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Chicken McNuggets (10 pc),Chicken,420,23,25,25,840,1,0
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Filet-O-Fish,Sandwiches,390,16,39,19,580,2,5
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Egg McMuffin,Breakfast,310,17,30,13,770,2,3
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Medium Fries,Sides,320,4,43,15,260,4,0
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Side Salad,Salads,15,1,3,0,10,1,2
+mcdonalds,McDonald's,#DA291C,mcdonald's|mcdonalds|mc donald's,Apple Slices,Sides,15,0,4,0,0,0,3
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,"Chicken Burrito Bowl (rice, beans, salsa)",Bowls,625,45,67,19,1370,14,5
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,"Steak Burrito Bowl (rice, beans, salsa)",Bowls,600,40,66,18,1300,14,5
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,Carnitas Burrito Bowl,Bowls,670,38,65,25,1450,13,5
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,Sofritas Bowl (tofu),Bowls,560,24,70,20,1280,16,6
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,Chicken Salad (no dressing),Salads,300,38,12,12,800,5,4
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,Chicken Burrito (full),Burritos,975,53,102,36,2000,12,6
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,Side of Guacamole,Sides,230,2,8,22,375,6,1
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,Chips,Sides,540,7,73,25,390,7,1
+chipotle,Chipotle Mexican Grill,#A81612,chipotle|chipotle mexican grill,3 Chicken Tacos (soft),Tacos,510,39,48,17,1140,8,3
+subway,Subway,#008C15,subway,"6"" Turkey Breast",Subs,280,18,40,4,760,5,6
+subway,Subway,#008C15,subway,"6"" Oven Roasted Chicken",Subs,320,23,41,6,640,5,6
+subway,Subway,#008C15,subway,"6"" Tuna",Subs,480,20,39,25,700,5,5
+subway,Subway,#008C15,subway,"6"" Steak & Cheese",Subs,380,26,42,12,920,5,7
+subway,Subway,#008C15,subway,"6"" Meatball Marinara",Subs,480,21,58,18,980,7,11
+subway,Subway,#008C15,subway,"6"" Veggie Delite",Subs,200,8,38,2,280,5,6
+subway,Subway,#008C15,subway,Footlong Turkey Breast,Subs,560,36,80,8,1520,10,12
+subway,Subway,#008C15,subway,Rotisserie Chicken Salad,Salads,130,20,9,4,460,4,5
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Chicken Sandwich,Sandwiches,420,29,41,18,1400,2,6
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Spicy Chicken Sandwich,Sandwiches,450,28,42,20,1640,3,6
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Grilled Chicken Sandwich,Sandwiches,320,28,41,6,680,4,9
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Nuggets (8 pc),Chicken,250,27,11,11,1210,0,1
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Grilled Nuggets (8 pc),Chicken,130,25,3,3,530,0,1
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Cobb Salad w/ Grilled Chicken,Salads,510,40,28,27,1110,5,9
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Grilled Chicken Cool Wrap,Wraps,350,37,29,13,940,14,4
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Waffle Fries (medium),Sides,420,5,45,24,240,5,0
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Side Salad,Salads,160,5,8,11,110,3,4
+tacobell,Taco Bell,#702082,taco bell,Crunchy Taco,Tacos,170,8,13,10,300,3,1
+tacobell,Taco Bell,#702082,taco bell,Soft Taco (beef),Tacos,180,9,18,9,490,3,1
+tacobell,Taco Bell,#702082,taco bell,Chicken Chalupa Supreme,Specialty,350,13,29,19,580,3,3
+tacobell,Taco Bell,#702082,taco bell,Bean Burrito,Burritos,350,13,54,9,1000,11,3
+tacobell,Taco Bell,#702082,taco bell,Beefy 5-Layer Burrito,Burritos,490,18,65,18,1250,8,5
+tacobell,Taco Bell,#702082,taco bell,Power Menu Bowl - Chicken,Bowls,470,26,50,19,1200,7,4
+tacobell,Taco Bell,#702082,taco bell,Crunchwrap Supreme,Specialty,530,16,71,21,1210,6,6
+tacobell,Taco Bell,#702082,taco bell,Black Beans & Rice,Sides,170,5,30,4,350,6,1
+wendys,Wendy's,#E2203D,wendy's|wendys,Jr. Cheeseburger,Burgers,290,15,26,14,690,1,6
+wendys,Wendy's,#E2203D,wendy's|wendys,Dave's Single,Burgers,590,30,39,34,1140,2,9
+wendys,Wendy's,#E2203D,wendy's|wendys,Baconator,Burgers,950,59,39,62,1810,2,9
+wendys,Wendy's,#E2203D,wendy's|wendys,Grilled Chicken Sandwich,Chicken,360,34,38,9,900,2,9
+wendys,Wendy's,#E2203D,wendy's|wendys,Spicy Chicken Sandwich,Chicken,500,30,50,21,1140,3,8
+wendys,Wendy's,#E2203D,wendy's|wendys,Chili (small),Sides,240,17,23,8,920,6,7
+wendys,Wendy's,#E2203D,wendy's|wendys,Apple Pecan Chicken Salad,Salads,430,33,32,21,850,6,23
+wendys,Wendy's,#E2203D,wendy's|wendys,Baked Potato (plain),Sides,270,7,61,0,25,7,3
+wendys,Wendy's,#E2203D,wendy's|wendys,Medium Fries,Sides,420,5,56,20,470,5,0
+starbucks,Starbucks,#00704A,starbucks,"Caffè Latte (Grande, 2%)",Drinks,190,13,19,7,170,0,18
+starbucks,Starbucks,#00704A,starbucks,Caffè Americano (Grande),Drinks,15,1,3,0,10,0,0
+starbucks,Starbucks,#00704A,starbucks,"Cold Brew (Grande, black)",Drinks,5,0,0,0,15,0,0
+starbucks,Starbucks,#00704A,starbucks,Egg White & Roasted Pepper Bites,Food,170,12,11,8,470,1,2
+starbucks,Starbucks,#00704A,starbucks,Bacon & Gruyère Egg Bites,Food,300,19,9,20,680,0,2
+starbucks,Starbucks,#00704A,starbucks,Turkey Bacon Egg White Sandwich,Food,230,17,28,5,560,3,2
+starbucks,Starbucks,#00704A,starbucks,Spinach Feta Wrap,Food,290,20,34,10,840,6,5
+starbucks,Starbucks,#00704A,starbucks,Protein Box (Eggs & Cheese),Food,470,23,40,25,470,5,16
+burgerking,Burger King,#D62300,burger king,Whopper,Burgers,660,28,49,40,980,2,11
+burgerking,Burger King,#D62300,burger king,Whopper Jr.,Burgers,310,13,27,18,410,1,6
+burgerking,Burger King,#D62300,burger king,Cheeseburger,Burgers,280,15,27,13,560,1,7
+burgerking,Burger King,#D62300,burger king,Chicken Jr.,Chicken,450,14,37,28,800,1,4
+burgerking,Burger King,#D62300,burger king,Original Chicken Sandwich,Chicken,660,24,48,40,1170,2,5
+burgerking,Burger King,#D62300,burger king,8 pc Chicken Nuggets,Chicken,340,17,19,22,580,1,0
+burgerking,Burger King,#D62300,burger king,Medium Fries,Sides,380,4,53,17,560,4,0
+pandaexpress,Panda Express,#D02B27,panda express,Grilled Teriyaki Chicken,Entrees,300,36,8,13,980,0,5
+pandaexpress,Panda Express,#D02B27,panda express,Orange Chicken,Entrees,490,25,51,23,820,2,19
+pandaexpress,Panda Express,#D02B27,panda express,Broccoli Beef,Entrees,150,9,13,7,520,2,7
+pandaexpress,Panda Express,#D02B27,panda express,Kung Pao Chicken,Entrees,290,16,14,19,970,2,7
+pandaexpress,Panda Express,#D02B27,panda express,String Bean Chicken Breast,Entrees,210,12,13,12,580,4,5
+pandaexpress,Panda Express,#D02B27,panda express,Steamed White Rice,Sides,380,7,87,0,0,0,0
+pandaexpress,Panda Express,#D02B27,panda express,Super Greens (side),Sides,90,6,10,3,250,5,4
+pandaexpress,Panda Express,#D02B27,panda express,Chow Mein,Sides,510,13,80,20,860,6,9
+panera,Panera Bread,#5B8A2B,panera|panera bread,Turkey Sandwich (whole),Sandwiches,470,25,64,13,1300,5,8
+panera,Panera Bread,#5B8A2B,panera|panera bread,Chipotle Chicken Avocado Melt,Sandwiches,720,41,65,33,1660,5,7
+panera,Panera Bread,#5B8A2B,panera|panera bread,Greek Salad (whole),Salads,380,9,19,31,820,6,9
+panera,Panera Bread,#5B8A2B,panera|panera bread,Caesar Salad w/ Chicken,Salads,470,37,22,27,970,4,4
+panera,Panera Bread,#5B8A2B,panera|panera bread,Ten Vegetable Soup (cup),Soups,70,3,14,1,720,4,6
+panera,Panera Bread,#5B8A2B,panera|panera bread,Broccoli Cheddar Soup (cup),Soups,230,8,16,15,1110,3,6
+panera,Panera Bread,#5B8A2B,panera|panera bread,Mac & Cheese (small),Sides,480,17,41,28,980,2,7
+kfc,KFC,#A1060E,kfc|kentucky fried chicken,Original Recipe Chicken Breast,Chicken,390,39,11,21,1190,0,0
+kfc,KFC,#A1060E,kfc|kentucky fried chicken,Original Recipe Drumstick,Chicken,130,12,4,8,380,0,0
+kfc,KFC,#A1060E,kfc|kentucky fried chicken,Kentucky Grilled Chicken Breast,Chicken,210,38,0,7,710,0,0
+kfc,KFC,#A1060E,kfc|kentucky fried chicken,Crispy Colonel Sandwich,Sandwiches,470,24,41,24,1180,3,6
+kfc,KFC,#A1060E,kfc|kentucky fried chicken,Famous Bowl,Bowls,710,26,80,32,2200,6,3
+kfc,KFC,#A1060E,kfc|kentucky fried chicken,Cole Slaw,Sides,170,1,22,9,320,3,16
+kfc,KFC,#A1060E,kfc|kentucky fried chicken,Mashed Potatoes w/ Gravy,Sides,130,3,20,4,600,1,1
+fiveguys,Five Guys,#ED174F,five guys,Hamburger,Burgers,700,39,39,43,430,2,8
+fiveguys,Five Guys,#ED174F,five guys,Little Hamburger,Burgers,480,23,39,26,380,2,8
+fiveguys,Five Guys,#ED174F,five guys,Bacon Cheeseburger,Burgers,920,51,40,62,1310,2,9
+fiveguys,Five Guys,#ED174F,five guys,Little Bacon Burger,Burgers,560,29,39,33,700,2,8
+fiveguys,Five Guys,#ED174F,five guys,Grilled Cheese,Sandwiches,470,16,41,26,715,2,7
+fiveguys,Five Guys,#ED174F,five guys,Fries (regular),Sides,950,15,122,41,525,13,4
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Hamburger w/ Onion,Burgers,390,16,39,19,650,3,10
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Cheeseburger w/ Onion,Burgers,480,22,39,27,1000,3,10
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Double-Double,Burgers,670,37,39,41,1440,3,10
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Protein Style Cheeseburger,Burgers,330,18,11,25,720,3,7
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Protein Style Double-Double,Burgers,520,33,11,39,1160,3,7
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,French Fries,Sides,370,7,54,18,245,2,0
+dunkin,Dunkin',#FF6E1B,dunkin|dunkin'|dunkin donuts|dunkin' donuts,Egg & Cheese Wake-Up Wrap,Breakfast,180,7,14,11,470,0,2
+dunkin,Dunkin',#FF6E1B,dunkin|dunkin'|dunkin donuts|dunkin' donuts,Turkey Sausage Egg White Sandwich,Breakfast,290,18,33,10,750,4,4
+dunkin,Dunkin',#FF6E1B,dunkin|dunkin'|dunkin donuts|dunkin' donuts,Sausage Egg & Cheese (croissant),Breakfast,600,21,38,40,940,1,5
+dunkin,Dunkin',#FF6E1B,dunkin|dunkin'|dunkin donuts|dunkin' donuts,Hash Browns,Sides,130,1,14,8,320,2,0
+dunkin,Dunkin',#FF6E1B,dunkin|dunkin'|dunkin donuts|dunkin' donuts,"Latte (medium, whole milk)",Drinks,200,11,18,10,150,0,17
+dunkin,Dunkin',#FF6E1B,dunkin|dunkin'|dunkin donuts|dunkin' donuts,Glazed Donut,Bakery,240,4,29,11,290,1,12

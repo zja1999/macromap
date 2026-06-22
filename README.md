@@ -77,6 +77,37 @@ Notes:
 - For frictionless testing, you can turn off **Authentication → Sign In / Providers → Confirm email** in Supabase so new accounts work instantly. With it on, new users get a confirmation email first.
 - Sync is **last-write-wins per device** on a single JSON blob — ideal for one person across phone + laptop. Real-time multi-device merge is a future enhancement.
 
+## Nutrition database (CSV → Supabase)
+
+The menu database is shared by all users and lives in Supabase (`chains` + `menu_items`). The app loads it at runtime and caches it, **falling back to the bundled list in [`js/nutrition-data.js`](js/nutrition-data.js)** if Supabase is unconfigured or unreachable — so it never breaks. You grow the database by editing a CSV and running one import command.
+
+**One-time setup:**
+1. Supabase → SQL Editor → run [`supabase/data-schema.sql`](supabase/data-schema.sql) (creates `chains`, `menu_items`, `data_requests` with the right security).
+2. Copy [`.env.example`](.env.example) to `.env` and paste your **service_role** key (Supabase → Project Settings → API Keys → `service_role`). `.env` is git-ignored — never commit it.
+
+**Import / update data:**
+```bash
+python scripts/import_data.py --dry-run     # validate the CSV, upload nothing
+python scripts/import_data.py               # upsert data/menu_data.csv into Supabase
+```
+It **upserts**, so re-running updates existing rows instead of duplicating. No `pip install` needed (standard library only).
+
+**Editing the data:** open [`data/menu_data.csv`](data/menu_data.csv) in Excel/Google Sheets. One row per menu item; columns:
+
+| Column | Meaning |
+|---|---|
+| `chain_id` | unique slug, e.g. `wendys` (repeat on every row for that chain) |
+| `chain_name`, `chain_color` | display name and brand hex color |
+| `match` | OSM brand aliases that link map pins to this chain, separated by `\|` |
+| `name`, `category` | item name and grouping |
+| `kcal`, `protein`, `carbs`, `fat`, `sodium`, `fiber`, `sugar` | numbers |
+
+Add a chain by adding its rows; add items by adding rows with an existing `chain_id`. *(No-script alternative: Supabase Table Editor → Import data from CSV, though you'd split it into separate `chains`/`menu_items` files.)*
+
+### Where chain requests go
+
+When a user taps **Request** (Discover) or submits the **Add Data** form, the request is saved to their own list **and** inserted into the central **`data_requests`** table. Review them in Supabase → **Table Editor → data_requests**; flip `status` from `open` to `added`/`declined` as you work through them.
+
 ## Deploy (static hosting)
 
 Because it's just static files, you can host it free on any static host — no server needed:
@@ -92,10 +123,16 @@ Add your Supabase config (above) before deploying if you want accounts live. If 
 Macro Map/
 ├── index.html              # app shell, loads scripts in dependency order
 ├── css/styles.css          # full design system (light + dark)
-├── supabase/schema.sql     # one-time DB setup for cloud accounts
+├── data/menu_data.csv      # editable seed/template for the nutrition database
+├── scripts/import_data.py  # CSV -> Supabase upsert importer (stdlib only)
+├── .env.example            # template for the import script's service-role key
+├── supabase/
+│   ├── schema.sql          # cloud-accounts table (app_state)
+│   └── data-schema.sql     # shared nutrition DB + data_requests tables
 └── js/
     ├── config.js           # Supabase URL + anon key (blank = local-only)
-    ├── nutrition-data.js   # curated chain + menu-item database
+    ├── nutrition-data.js   # bundled fallback database + lookup helpers
+    ├── data-source.js      # loads shared DB from Supabase; routes requests
     ├── storage.js          # localStorage store + change/sync hooks
     ├── macros.js           # BMR / TDEE / macro-target math
     ├── recommend.js        # item scoring & ranking engine
