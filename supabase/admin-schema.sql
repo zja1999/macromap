@@ -17,6 +17,10 @@ create policy "data_requests_admin_update" on public.data_requests
   for update using ((auth.jwt() ->> 'email') = 'zja1999@gmail.com')
   with check ((auth.jwt() ->> 'email') = 'zja1999@gmail.com');
 
+drop policy if exists "data_requests_admin_delete" on public.data_requests;
+create policy "data_requests_admin_delete" on public.data_requests
+  for delete using ((auth.jwt() ->> 'email') = 'zja1999@gmail.com');
+
 -- Admin can read all feedback.
 drop policy if exists "feedback_admin_read" on public.feedback;
 create policy "feedback_admin_read" on public.feedback
