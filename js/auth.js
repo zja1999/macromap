@@ -14,6 +14,7 @@ window.MM = window.MM || {};
 window.MM.auth = (function () {
   var client = null;
   var user = null;
+  var accessToken = null;      // current session JWT, for authenticated REST calls
   var syncedUserId = null;     // user we've already done the login-merge for
   var stateListeners = [];
   var pushTimer = null;
@@ -40,6 +41,7 @@ window.MM.auth = (function () {
       var nextUser = session ? session.user : null;
       var signedIn = !!nextUser;
       user = nextUser;
+      accessToken = session ? session.access_token : null;
 
       if (signedIn) {
         // Only run the login merge once per user (ignore TOKEN_REFRESHED etc.).
@@ -158,7 +160,7 @@ window.MM.auth = (function () {
     return pushNow().then(function () {
       return client.auth.signOut();
     }).then(function () {
-      user = null; syncedUserId = null; emit();
+      user = null; accessToken = null; syncedUserId = null; emit();
     });
   }
 
@@ -174,6 +176,7 @@ window.MM.auth = (function () {
     init: init,
     isEnabled: isEnabled,
     currentUser: currentUser,
+    accessToken: function () { return accessToken; },
     signUp: signUp,
     signIn: signIn,
     signInWithGoogle: signInWithGoogle,

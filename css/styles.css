@@ -349,6 +349,13 @@ textarea.input { resize: vertical; }
 .req-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .req-row:last-child { border-bottom: none; }
 
+/* admin view */
+.admin-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.admin-row:last-child { border-bottom: none; }
+.admin-main { min-width: 0; flex: 1; }
+.admin-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.fb-msg { margin-top: 3px; white-space: pre-wrap; }
+
 /* ----------------------------------------------------------- misc */
 .empty-hint { color: var(--muted); font-size: 14px; padding: 18px; text-align: center; background: var(--surface-2); border: 1px dashed var(--border); border-radius: var(--radius-sm); }
 .notice { text-align: center; }

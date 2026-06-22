@@ -113,6 +113,25 @@ When a user taps **Request** (Discover) or submits the **Add Data** form, the re
 
 The footer **Send feedback** button writes to a **`feedback`** table (message, category, the view it came from, and user if signed in). Create it once by running [`supabase/feedback-schema.sql`](supabase/feedback-schema.sql), then read submissions in Supabase → **Table Editor → feedback**. Both requests and feedback are validated and rate-limited client-side to deter spam.
 
+### Admin view (owner only)
+
+Signing in as the owner reveals an **Admin** tab that lists chain requests (with one-tap *added / declined / reopen*) and feedback, right in the app. To enable it:
+
+1. Set `adminEmail` in [`js/config.js`](js/config.js) to your account email.
+2. Edit [`supabase/admin-schema.sql`](supabase/admin-schema.sql) — replace the email with the same one — and run it in the SQL Editor.
+
+The tab is hidden for everyone else, and access is enforced by Row-Level Security (matched against your login's email), not just by hiding UI — so a non-owner can't read others' requests/feedback even via the API.
+
+## Install on your phone (PWA)
+
+Macro Map is an installable Progressive Web App (manifest + service worker + icons), so it works offline-friendly and adds a home-screen icon:
+
+- **iPhone (Safari):** open the site → Share → **Add to Home Screen**.
+- **Android (Chrome):** open the site → menu → **Install app** / **Add to Home screen**.
+- **Desktop (Chrome/Edge):** an **install** icon appears in the address bar.
+
+It launches full-screen like a native app; the app shell and your data work offline (live map/search still need a connection). Regenerate icons anytime with `python scripts/make_icons.py`.
+
 ## Deploy (static hosting)
 
 Because it's just static files, you can host it free on any static host — no server needed:

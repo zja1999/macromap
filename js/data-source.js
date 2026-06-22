@@ -174,7 +174,45 @@ window.MM.data = (function () {
     });
   }
 
+  /* ---- admin (owner-only) ----
+   * Reads/updates run as the authenticated owner (JWT in the Authorization
+   * header) so RLS grants access to all rows; see supabase/admin-schema.sql.
+   * isAdmin() only toggles UI — the database enforces the real boundary. */
+  function authHeaders() {
+    var token = (window.MM.auth && window.MM.auth.accessToken && window.MM.auth.accessToken()) || cfg().supabaseAnonKey;
+    return { apikey: cfg().supabaseAnonKey, Authorization: "Bearer " + token };
+  }
+  function isAdmin() {
+    var u = window.MM.auth && window.MM.auth.currentUser && window.MM.auth.currentUser();
+    var admin = cfg().adminEmail;
+    return !!(u && admin && u.email && u.email.toLowerCase() === String(admin).toLowerCase());
+  }
+  function getJSON(path) {
+    return fetch(cfg().supabaseUrl + "/rest/v1/" + path, { headers: authHeaders() })
+      .then(function (r) { return r.json(); });
+  }
+  function fetchRequests() { return getJSON("data_requests?select=*&order=created_at.desc&limit=200"); }
+  function fetchFeedback() { return getJSON("feedback?select=*&order=created_at.desc&limit=200"); }
+  function updateRequestStatus(id, status) {
+    return fetch(cfg().supabaseUrl + "/rest/v1/data_requests?id=eq." + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: Object.assign({ "Content-Type": "application/json", Prefer: "return=minimal" }, authHeaders()),
+      body: JSON.stringify({ status: status })
+    }).then(function (r) {
+      if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+      return true;
+    });
+  }
+
   applyCache();
 
-  return { loadNutrition: loadNutrition, submitRequest: submitRequest, submitFeedback: submitFeedback };
+  return {
+    loadNutrition: loadNutrition,
+    submitRequest: submitRequest,
+    submitFeedback: submitFeedback,
+    isAdmin: isAdmin,
+    fetchRequests: fetchRequests,
+    fetchFeedback: fetchFeedback,
+    updateRequestStatus: updateRequestStatus
+  };
 })();

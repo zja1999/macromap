@@ -6,13 +6,22 @@
   <title>Macro Map — eat well, wherever you are</title>
   <meta name="description" content="Find fast-food & restaurant menu items near you that fit your calorie and macro goals." />
 
+  <!-- PWA / installable -->
+  <link rel="manifest" href="manifest.webmanifest?v=4" />
+  <meta name="theme-color" content="#16a34a" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Macro Map" />
+
   <!-- Leaflet (map) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-  <link rel="stylesheet" href="css/styles.css?v=3" />
+  <link rel="stylesheet" href="css/styles.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -42,6 +51,7 @@
     <section id="view-recommend" class="view hidden"></section>
     <section id="view-tracker"   class="view hidden"></section>
     <section id="view-requests"  class="view hidden"></section>
+    <section id="view-admin"     class="view hidden"></section>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -58,15 +68,15 @@
   <!-- App scripts, loaded in dependency order (no build step required).
        The ?v= query busts stale browser caches after a deploy — bump it when
        you ship significant JS/CSS changes. -->
-  <script src="js/config.js?v=3"></script>
-  <script src="js/nutrition-data.js?v=3"></script>
-  <script src="js/storage.js?v=3"></script>
-  <script src="js/macros.js?v=3"></script>
-  <script src="js/recommend.js?v=3"></script>
-  <script src="js/map.js?v=3"></script>
-  <script src="js/ui.js?v=3"></script>
-  <script src="js/auth.js?v=3"></script>
-  <script src="js/data-source.js?v=3"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/config.js?v=4"></script>
+  <script src="js/nutrition-data.js?v=4"></script>
+  <script src="js/storage.js?v=4"></script>
+  <script src="js/macros.js?v=4"></script>
+  <script src="js/recommend.js?v=4"></script>
+  <script src="js/map.js?v=4"></script>
+  <script src="js/ui.js?v=4"></script>
+  <script src="js/auth.js?v=4"></script>
+  <script src="js/data-source.js?v=4"></script>
+  <script src="js/app.js?v=4"></script>
 </body>
 </html>

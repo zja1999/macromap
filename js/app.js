@@ -114,21 +114,25 @@ window.MM.app = (function () {
     if (view === "recommend") renderRecommend();
     if (view === "tracker") renderTracker();
     if (view === "requests") renderRequests();
+    if (view === "admin") renderAdmin();
     window.scrollTo(0, 0);
   }
 
   function renderNav() {
     var nav = document.getElementById("nav");
     ui.clear(nav);
-    VIEWS.forEach(function (v) {
+    var views = VIEWS.slice();
+    if (window.MM.data.isAdmin()) views.push({ id: "admin", label: "Admin", icon: "🛠️" });
+    views.forEach(function (v) {
       nav.appendChild(el("button", {
-        class: "nav-item", "data-view": v.id,
+        class: "nav-item" + (v.id === state.view ? " active" : ""), "data-view": v.id,
         onclick: function () { navigate(v.id); }
       }, [
         el("span", { class: "nav-icon" }, v.icon),
         el("span", { class: "nav-label" }, v.label)
       ]));
     });
+    renderNavBadge();
   }
 
   function renderNavBadge() {
@@ -1104,6 +1108,94 @@ window.MM.app = (function () {
     root.appendChild(listCard);
   }
 
+  /* =====================================================================
+   *  ADMIN VIEW (owner only)
+   * ===================================================================== */
+
+  function renderAdmin() {
+    var root = document.getElementById("view-admin");
+    ui.clear(root);
+    root.appendChild(header("Admin", "Requests and feedback from your users.",
+      el("button", { class: "btn small ghost", onclick: renderAdmin }, "Refresh")));
+
+    if (!window.MM.data.isAdmin()) {
+      root.appendChild(noticeCard("Owner only", "Sign in with the admin account to view requests and feedback.",
+        "Back to Tracker", function () { navigate("tracker"); }));
+      return;
+    }
+
+    var reqCard = el("div", { class: "card" }, [
+      el("div", { class: "section-label" }, "Chain requests"),
+      el("div", { id: "admin-requests" }, [emptyHint("Loading…")])
+    ]);
+    var fbCard = el("div", { class: "card" }, [
+      el("div", { class: "section-label" }, "Feedback"),
+      el("div", { id: "admin-feedback" }, [emptyHint("Loading…")])
+    ]);
+    root.appendChild(reqCard);
+    root.appendChild(fbCard);
+
+    window.MM.data.fetchRequests().then(function (rows) {
+      var host = document.getElementById("admin-requests"); if (!host) return;
+      ui.clear(host);
+      if (!rows || !rows.length) { host.appendChild(emptyHint("No requests yet.")); return; }
+      // open ones first
+      rows.sort(function (a, b) { return (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1); });
+      rows.forEach(function (r) { host.appendChild(adminRequestRow(r)); });
+    }).catch(function (e) { adminError("admin-requests", e); });
+
+    window.MM.data.fetchFeedback().then(function (rows) {
+      var host = document.getElementById("admin-feedback"); if (!host) return;
+      ui.clear(host);
+      if (!rows || !rows.length) { host.appendChild(emptyHint("No feedback yet.")); return; }
+      rows.forEach(function (f) { host.appendChild(adminFeedbackRow(f)); });
+    }).catch(function (e) { adminError("admin-feedback", e); });
+  }
+
+  function adminError(hostId, e) {
+    var host = document.getElementById(hostId); if (!host) return;
+    ui.clear(host);
+    var msg = /relation|schema cache|404|does not exist/i.test(e.message || "")
+      ? "Table not found — run supabase/admin-schema.sql to grant admin access."
+      : "Couldn't load: " + (e.message || "error");
+    host.appendChild(emptyHint(msg));
+  }
+
+  var STATUS_CLS = { open: "warn", added: "ok", declined: "muted" };
+  function adminRequestRow(r) {
+    var status = r.status || "open";
+    var actions = el("div", { class: "admin-actions" }, [
+      status !== "added" ? el("button", { class: "btn small primary", onclick: function () { setReqStatus(r.id, "added"); } }, "Mark added") : null,
+      status !== "declined" ? el("button", { class: "btn small ghost", onclick: function () { setReqStatus(r.id, "declined"); } }, "Decline") : null,
+      status !== "open" ? el("button", { class: "btn small ghost", onclick: function () { setReqStatus(r.id, "open"); } }, "Reopen") : null
+    ]);
+    return el("div", { class: "admin-row" }, [
+      el("div", { class: "admin-main" }, [
+        el("div", { class: "item-name" }, [r.chain, " ", ui.badge(status, STATUS_CLS[status] || "muted")]),
+        el("div", { class: "muted small" }, (r.note ? r.note + " · " : "") + prettyDateTime(r.created_at))
+      ]),
+      actions
+    ]);
+  }
+
+  function setReqStatus(id, status) {
+    window.MM.data.updateRequestStatus(id, status)
+      .then(function () { ui.toast("Marked " + status, "ok"); renderAdmin(); })
+      .catch(function (e) { ui.toast(e.message, "err"); });
+  }
+
+  function adminFeedbackRow(f) {
+    return el("div", { class: "admin-row" }, [
+      el("div", { class: "admin-main" }, [
+        el("div", { class: "item-name" }, [
+          ui.badge(f.category || "general", "muted"), " ",
+          el("span", { class: "muted small" }, prettyDateTime(f.created_at) + (f.context ? " · " + f.context : ""))
+        ]),
+        el("div", { class: "fb-msg" }, f.message)
+      ])
+    ]);
+  }
+
   /* ------------------------------------------------------ small builders */
 
   function header(title, sub, help) {
@@ -1225,6 +1317,7 @@ window.MM.app = (function () {
     else if (v === "recommend") renderRecommend();
     else if (v === "tracker") renderTracker();
     else if (v === "requests") renderRequests();
+    else if (v === "admin") renderAdmin();
     renderNavBadge();
   }
 
@@ -1376,6 +1469,8 @@ window.MM.app = (function () {
     // after a login pull replaces local state, refresh whatever view is open.
     window.MM.auth.onState(function (status) {
       renderAccount(status);
+      renderNav(); // show/hide the Admin tab as auth changes
+      if (state.view === "admin" && !window.MM.data.isAdmin()) { navigate("tracker"); return; }
       refreshCurrent();
     });
     window.MM.auth.init();
@@ -1388,6 +1483,13 @@ window.MM.app = (function () {
 
     var fb = document.getElementById("feedback-link");
     if (fb) fb.addEventListener("click", openFeedbackModal);
+
+    // Register the service worker for offline support + installability (PWA).
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(function (e) {
+        console.warn("Macro Map: service worker registration failed.", e);
+      });
+    }
   }
 
   return {
