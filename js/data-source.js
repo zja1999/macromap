@@ -175,17 +175,22 @@ window.MM.data = (function () {
   }
 
   /* ---- admin (owner-only) ----
-   * Reads/updates run as the authenticated owner (JWT in the Authorization
+   * Reads/updates run as an authenticated admin (JWT in the Authorization
    * header) so RLS grants access to all rows; see supabase/admin-schema.sql.
    * isAdmin() only toggles UI — the database enforces the real boundary. */
   function authHeaders() {
     var token = (window.MM.auth && window.MM.auth.accessToken && window.MM.auth.accessToken()) || cfg().supabaseAnonKey;
     return { apikey: cfg().supabaseAnonKey, Authorization: "Bearer " + token };
   }
+  function adminEmails() {
+    var raw = Array.isArray(cfg().adminEmails) ? cfg().adminEmails : (cfg().adminEmail ? [cfg().adminEmail] : []);
+    return raw.map(function (email) { return String(email || "").trim().toLowerCase(); })
+      .filter(function (email) { return !!email; });
+  }
   function isAdmin() {
     var u = window.MM.auth && window.MM.auth.currentUser && window.MM.auth.currentUser();
-    var admin = cfg().adminEmail;
-    return !!(u && admin && u.email && u.email.toLowerCase() === String(admin).toLowerCase());
+    if (!u || !u.email) return false;
+    return adminEmails().indexOf(String(u.email).trim().toLowerCase()) !== -1;
   }
   function getJSON(path) {
     return fetch(cfg().supabaseUrl + "/rest/v1/" + path, { headers: authHeaders() })
