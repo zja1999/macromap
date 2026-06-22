@@ -335,6 +335,9 @@ textarea.input { resize: vertical; }
 .chip { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
 .chip:hover { border-color: var(--accent); }
 .chip.meal { background: var(--accent-soft); color: var(--accent-dark); border-color: transparent; }
+/* "Spotted near you without data" request chips — filled accent so the white label reads clearly in both themes */
+.chip.add { background: var(--accent); color: #fff; border-color: transparent; }
+.chip.add:hover { background: var(--accent-dark); border-color: transparent; }
 
 .quickadd-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .quickadd-form .grow { flex: 1; min-width: 150px; }
@@ -348,6 +351,53 @@ textarea.input { resize: vertical; }
 
 .req-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .req-row:last-child { border-bottom: none; }
+
+/* ----------------------------------------------------------- coach insight */
+.coach-card { display: flex; align-items: center; gap: 14px; background: var(--accent-soft); border-color: transparent; }
+.coach-emoji { font-size: 26px; line-height: 1; flex-shrink: 0; }
+.coach-msg { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: var(--text); }
+.coach-card .btn { flex-shrink: 0; }
+
+/* ----------------------------------------------------------- logging streak */
+.loghead-title { display: flex; align-items: center; gap: 9px; }
+.streak-pill { font-size: 12.5px; font-weight: 800; padding: 2px 9px; border-radius: 999px; background: #fff3e0; color: #c2410c; border: 1px solid #fed7aa; }
+@media (prefers-color-scheme: dark) { .streak-pill { background: #3a230f; color: #fdba74; border-color: #7c3a16; } }
+
+/* ----------------------------------------------------------- weigh-in */
+.weigh-form { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.weigh-form .input { width: 120px; }
+.weight-trend { display: flex; align-items: center; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); flex-wrap: wrap; }
+.spark { flex: 1; min-width: 180px; }
+.spark svg { display: block; }
+.weight-stats { flex-shrink: 0; min-width: 160px; }
+.wt-num { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+.weight-stats .good { color: var(--accent-dark); font-weight: 600; }
+
+/* ----------------------------------------------------------- habits */
+.habit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.habit-wrap { position: relative; }
+.habit {
+  width: 100%; display: flex; align-items: center; gap: 9px; text-align: left;
+  font: inherit; font-size: 14px; font-weight: 600; color: var(--text);
+  padding: 12px 13px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface-2); cursor: pointer;
+  transition: border .15s, background .15s;
+}
+.habit:hover { border-color: var(--accent); }
+.habit.done { background: var(--accent-soft); border-color: transparent; }
+.habit-emoji { font-size: 18px; line-height: 1; flex-shrink: 0; }
+.habit-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.habit-streak { font-size: 12px; font-weight: 800; color: #c2410c; flex-shrink: 0; }
+.habit-check { width: 20px; height: 20px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 13px; font-weight: 800; color: #fff; background: transparent; }
+.habit.done .habit-check { background: var(--accent); }
+.habit-del {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font-size: 11px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s;
+}
+.habit-wrap:hover .habit-del { opacity: 1; }
+.habit-del:hover { color: var(--danger); border-color: var(--danger); }
+@media (max-width: 640px) { .habit-grid { grid-template-columns: 1fr; } .habit-del { opacity: 1; } }
 
 /* admin view */
 .admin-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border); }

@@ -16,8 +16,25 @@ window.MM.store = (function () {
     savedMeals: [],       // [ { id, name, items:[logEntry] } ]
     frequents: {},        // { "chainId::itemName": count }
     requests: [],         // [ { id, chain, note, lat, lng, date } ]
-    lastLocation: null    // { lat, lng, label }
+    lastLocation: null,   // { lat, lng, label }
+    weights: {},          // { "YYYY-MM-DD": kg } — body weight log, stored in kg
+    habits: null,         // [ { id, name, emoji } ] — null until seeded with defaults
+    habitLog: {}          // { "YYYY-MM-DD": { habitId: true } }
   };
+
+  var DEFAULT_HABITS = [
+    { id: "protein", name: "Hit protein goal", emoji: "💪" },
+    { id: "water",   name: "Drink water",      emoji: "💧" },
+    { id: "move",    name: "Move / exercise",  emoji: "🚶" },
+    { id: "veggies", name: "Eat veggies",      emoji: "🥦" }
+  ];
+
+  // Walk back from `endKey` (a YYYY-MM-DD string), yielding each prior day key.
+  function prevDayKey(key) {
+    var d = new Date(key + "T00:00:00");
+    d.setDate(d.getDate() - 1);
+    return todayKey(d);
+  }
 
   var state = load();
   var listeners = [];
@@ -151,6 +168,80 @@ window.MM.store = (function () {
     // ---- location ----
     getLastLocation: function () { return state.lastLocation; },
     setLastLocation: function (loc) { state.lastLocation = loc; persist(); },
+
+    // ---- body weight log (kg internally) ----
+    getWeight: function (dateKey) {
+      var k = dateKey || todayKey();
+      return typeof state.weights[k] === "number" ? state.weights[k] : null;
+    },
+    setWeight: function (kg, dateKey) {
+      var k = dateKey || todayKey();
+      if (kg == null || isNaN(kg)) { delete state.weights[k]; }
+      else { state.weights[k] = Math.round(kg * 10) / 10; }
+      persist();
+    },
+    // Chronological series of { date, kg }, oldest first.
+    weightSeries: function () {
+      return Object.keys(state.weights)
+        .filter(function (k) { return typeof state.weights[k] === "number"; })
+        .sort()
+        .map(function (k) { return { date: k, kg: state.weights[k] }; });
+    },
+
+    // ---- habits ----
+    getHabits: function () {
+      if (!state.habits) { state.habits = clone(DEFAULT_HABITS); writeLocal(); }
+      return state.habits.slice();
+    },
+    addHabit: function (name, emoji) {
+      if (!state.habits) state.habits = clone(DEFAULT_HABITS);
+      var id = "h" + Date.now() + Math.floor(Math.random() * 1000);
+      state.habits.push({ id: id, name: name, emoji: emoji || "✅" });
+      persist();
+      return id;
+    },
+    removeHabit: function (id) {
+      if (!state.habits) return;
+      state.habits = state.habits.filter(function (h) { return h.id !== id; });
+      // also drop its checkmarks across all days
+      Object.keys(state.habitLog).forEach(function (day) {
+        if (state.habitLog[day]) delete state.habitLog[day][id];
+      });
+      persist();
+    },
+    isHabitDone: function (id, dateKey) {
+      var k = dateKey || todayKey();
+      return !!(state.habitLog[k] && state.habitLog[k][id]);
+    },
+    toggleHabit: function (id, dateKey) {
+      var k = dateKey || todayKey();
+      if (!state.habitLog[k]) state.habitLog[k] = {};
+      if (state.habitLog[k][id]) delete state.habitLog[k][id];
+      else state.habitLog[k][id] = true;
+      if (!Object.keys(state.habitLog[k]).length) delete state.habitLog[k];
+      persist();
+      return this.isHabitDone(id, k);
+    },
+    // Current streak of consecutive done-days ending today (today may still be
+    // pending without breaking the streak).
+    habitStreak: function (id) {
+      var day = todayKey();
+      var isDone = function (d) { return !!(state.habitLog[d] && state.habitLog[d][id]); };
+      if (!isDone(day)) day = prevDayKey(day); // grace: today not done yet
+      var streak = 0;
+      while (isDone(day)) { streak++; day = prevDayKey(day); }
+      return streak;
+    },
+
+    // Consecutive days (ending today) that have at least one logged food item.
+    loggingStreak: function () {
+      var day = todayKey();
+      var has = function (d) { return !!(state.logs[d] && state.logs[d].length); };
+      if (!has(day)) day = prevDayKey(day); // today still open
+      var streak = 0;
+      while (has(day)) { streak++; day = prevDayKey(day); }
+      return streak;
+    },
 
     // ---- sync hooks ----
     // Register a callback fired after every change. Receives (state, { fromSync }).

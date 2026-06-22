@@ -499,8 +499,17 @@ window.MM.app = (function () {
 
     withData.forEach(function (p) { listEl.appendChild(placeRow(p)); });
     if (without.length) {
-      listEl.appendChild(el("div", { class: "list-subhead" }, "No data yet — help us add them"));
-      without.slice(0, 12).forEach(function (p) { listEl.appendChild(placeRow(p)); });
+      // De-dupe by name (keeping the nearest occurrence, since places are sorted
+      // by distance) so every distinct missing chain shows — no arbitrary cap.
+      var seen = {};
+      var uniqueWithout = without.filter(function (p) {
+        var key = p.name.toLowerCase();
+        if (seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
+      listEl.appendChild(el("div", { class: "list-subhead" }, "No data yet — help us add them (" + uniqueWithout.length + ")"));
+      uniqueWithout.forEach(function (p) { listEl.appendChild(placeRow(p)); });
     }
   }
 
@@ -894,6 +903,10 @@ window.MM.app = (function () {
     summary.appendChild(bars);
     root.appendChild(summary);
 
+    // smart coach insight (today only)
+    var coach = coachInsight();
+    if (coach) root.appendChild(coach);
+
     // micro totals
     root.appendChild(el("div", { class: "card micro-row-card" }, [
       microStat("Sodium", ui.fmt(c.sodium) + " mg"),
@@ -906,9 +919,13 @@ window.MM.app = (function () {
     root.appendChild(quickAddCard());
 
     // log list
+    var streak = window.MM.store.loggingStreak();
     var logCard = el("div", { class: "card" });
     logCard.appendChild(el("div", { class: "list-head" }, [
-      el("strong", null, "Food log"),
+      el("div", { class: "loghead-title" }, [
+        el("strong", null, "Food log"),
+        (isToday && streak >= 2) ? el("span", { class: "streak-pill", title: streak + " days logged in a row" }, "🔥 " + streak) : null
+      ]),
       entries.length ? el("div", null, [
         el("button", { class: "btn small ghost", onclick: saveDayAsMeal }, "Save as meal"),
         el("button", { class: "btn small ghost", onclick: clearDay }, "Clear day")
@@ -921,7 +938,184 @@ window.MM.app = (function () {
     }
     root.appendChild(logCard);
 
+    // progress: weigh-in + habits
+    root.appendChild(weighInCard());
+    root.appendChild(habitsCard());
+
     renderNavBadge();
+  }
+
+  /* ---------- smart coach insight (reacts to today's remaining macros) ----- */
+  function coachInsight() {
+    var tg = window.MM.store.getTargets();
+    if (!tg) return null;
+    if (state.viewDate !== window.MM.store.todayKey()) return null; // coaching is about *today*
+    var rem = remaining();
+    if (!rem) return null;
+    var logged = window.MM.store.getLog(state.viewDate).length;
+
+    var emoji = "🧭", msg, action = null;
+    if (rem.kcal < -50) {
+      emoji = "⚖️";
+      msg = "You're " + ui.fmt(-rem.kcal) + " cal over target today. No stress — consistency beats any single day.";
+    } else if (!logged) {
+      emoji = "🌅";
+      msg = "Fresh start: " + ui.fmt(rem.kcal) + " cal and " + ui.fmt(Math.max(rem.protein, 0)) + "g protein to go. Log your first item to get rolling.";
+      action = { label: "Find food →", view: "recommend" };
+    } else if (rem.protein > 25 && rem.kcal > 150) {
+      emoji = "💪";
+      msg = "You have " + ui.fmt(rem.protein) + "g protein and " + ui.fmt(rem.kcal) + " cal left — a high-protein pick would round out your day.";
+      action = { label: "See picks →", view: "recommend" };
+    } else if (rem.kcal <= 120 && rem.protein <= 15) {
+      emoji = "🎯";
+      msg = "Dialed in — you've essentially hit your calories and protein for today. Nice work.";
+    } else {
+      emoji = "🍽️";
+      msg = ui.fmt(Math.max(rem.kcal, 0)) + " cal left and " + ui.fmt(Math.max(rem.protein, 0)) + "g protein to go.";
+      action = { label: "Find food →", view: "recommend" };
+    }
+
+    var children = [el("span", { class: "coach-emoji" }, emoji), el("div", { class: "coach-msg" }, msg)];
+    if (action) children.push(el("button", { class: "btn small", onclick: function () { navigate(action.view); } }, action.label));
+    return el("div", { class: "card coach-card" }, children);
+  }
+
+  /* ---------- weigh-in card (body-weight log + trend) ---------------------- */
+  function weighInCard() {
+    var store = window.MM.store, m = window.MM.macros;
+    var prof = store.getProfile();
+    var metric = prof && prof.units === "metric";
+    var toDisp = function (kg) { return metric ? kg : m.kgToLb(kg); };
+    var fromDisp = function (v) { return metric ? v : m.lbToKg(v); };
+    var unit = metric ? "kg" : "lb";
+
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { class: "section-label" }, "Weigh-in · " + prettyDate(state.viewDate)));
+
+    var existing = store.getWeight(state.viewDate);
+    var input = el("input", {
+      class: "input", type: "number", step: "0.1", min: "0", placeholder: "Weight",
+      value: existing != null ? String(Math.round(toDisp(existing) * 10) / 10) : null
+    });
+    var form = el("form", { class: "weigh-form" }, [
+      input, el("span", { class: "unit" }, unit),
+      el("button", { class: "btn primary small", type: "submit" }, existing != null ? "Update" : "Log"),
+      existing != null ? el("button", {
+        class: "btn ghost small", type: "button",
+        onclick: function () { store.setWeight(null, state.viewDate); renderTracker(); }
+      }, "Clear") : null
+    ]);
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = parseFloat(input.value);
+      if (isNaN(v) || v <= 0) { ui.toast("Enter a valid weight", "err"); return; }
+      store.setWeight(fromDisp(v), state.viewDate);
+      ui.toast("Weight logged for " + prettyDate(state.viewDate), "ok");
+      renderTracker();
+    });
+    card.appendChild(form);
+
+    var series = store.weightSeries();
+    if (series.length >= 2) card.appendChild(weightTrend(series, toDisp, unit, prof));
+    else if (series.length === 1) card.appendChild(el("p", { class: "muted small" }, "Log another day to see your trend."));
+    return card;
+  }
+
+  function weightTrend(series, toDisp, unit, prof) {
+    var first = series[0], last = series[series.length - 1];
+    var net = toDisp(last.kg) - toDisp(first.kg);
+    var days = Math.max(1, (new Date(last.date + "T00:00:00") - new Date(first.date + "T00:00:00")) / 86400000);
+    var perWeek = net / days * 7;
+    var signed = function (x) { return (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(1); };
+
+    var goalDir = prof ? ({ lose: -1, gain: 1, maintain: 0 })[prof.goal] : null;
+    var aligned = goalDir == null ? null
+      : goalDir === 0 ? Math.abs(perWeek) < 0.4
+      : goalDir < 0 ? perWeek < -0.05 : perWeek > 0.05;
+    var insight;
+    if (goalDir == null) insight = Math.abs(perWeek).toFixed(1) + " " + unit + "/wk";
+    else if (goalDir === 0) insight = aligned ? "Holding steady — right on target." : "Drifting " + (perWeek > 0 ? "up" : "down") + " " + Math.abs(perWeek).toFixed(1) + " " + unit + "/wk.";
+    else if (aligned) insight = "On track — " + Math.abs(perWeek).toFixed(1) + " " + unit + "/wk toward your goal.";
+    else insight = "Trending the other way (" + signed(perWeek) + " " + unit + "/wk). Worth a look at intake.";
+
+    return el("div", { class: "weight-trend" }, [
+      sparkline(series.map(function (s) { return toDisp(s.kg); }), aligned),
+      el("div", { class: "weight-stats" }, [
+        el("div", null, [
+          el("span", { class: "wt-num" }, signed(net) + " " + unit),
+          el("span", { class: "muted small" }, " since " + prettyDate(first.date) + " · " + series.length + " weigh-ins")
+        ]),
+        el("div", { class: "muted small" + (aligned ? " good" : "") }, insight)
+      ])
+    ]);
+  }
+
+  // Inline SVG sparkline of a numeric series. `good` tints the line (green/amber).
+  function sparkline(values, good) {
+    var w = 240, h = 46, pad = 5;
+    var min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+    var span = (max - min) || 1, n = values.length;
+    var pts = values.map(function (v, i) {
+      var x = pad + (n === 1 ? 0 : (i / (n - 1)) * (w - 2 * pad));
+      var y = pad + (1 - (v - min) / span) * (h - 2 * pad);
+      return x.toFixed(1) + "," + y.toFixed(1);
+    });
+    var stroke = good === false ? "var(--warn)" : "var(--accent)";
+    var lastPt = pts[pts.length - 1].split(",");
+    var svg = "<svg viewBox='0 0 " + w + " " + h + "' width='100%' height='" + h + "' preserveAspectRatio='none'>" +
+      "<polyline fill='none' stroke='" + stroke + "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' points='" + pts.join(" ") + "'/>" +
+      "<circle cx='" + lastPt[0] + "' cy='" + lastPt[1] + "' r='3.2' fill='" + stroke + "'/></svg>";
+    return el("div", { class: "spark", html: svg });
+  }
+
+  /* ---------- daily habits (toggles + streaks) ---------------------------- */
+  function habitsCard() {
+    var store = window.MM.store;
+    var habits = store.getHabits();
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { class: "list-head" }, [
+      el("strong", null, "Daily habits"),
+      el("button", { class: "btn small ghost", onclick: addHabitPrompt }, "+ Add habit")
+    ]));
+    if (!habits.length) { card.appendChild(emptyHint("No habits yet. Add one to start a streak.")); return card; }
+
+    var grid = el("div", { class: "habit-grid" });
+    habits.forEach(function (hb) {
+      var done = store.isHabitDone(hb.id, state.viewDate);
+      var streak = store.habitStreak(hb.id);
+      var btn = el("button", {
+        class: "habit" + (done ? " done" : ""),
+        onclick: function () { store.toggleHabit(hb.id, state.viewDate); renderTracker(); }
+      }, [
+        el("span", { class: "habit-emoji" }, hb.emoji),
+        el("span", { class: "habit-name" }, hb.name),
+        streak > 0 ? el("span", { class: "habit-streak" }, "🔥 " + streak) : null,
+        el("span", { class: "habit-check" }, done ? "✓" : "")
+      ]);
+      var del = el("button", {
+        class: "habit-del", title: "Remove habit",
+        onclick: function (ev) { ev.stopPropagation(); store.removeHabit(hb.id); renderTracker(); }
+      }, "✕");
+      grid.appendChild(el("div", { class: "habit-wrap" }, [btn, del]));
+    });
+    card.appendChild(grid);
+    return card;
+  }
+
+  function addHabitPrompt() {
+    var emojiIn = el("input", { class: "input", placeholder: "✅", maxlength: "2", value: "✅" });
+    var nameIn = el("input", { class: "input", placeholder: "e.g. 10k steps" });
+    ui.modal("Add a habit", el("div", { class: "form-grid" }, [
+      field("Emoji", emojiIn), field("Habit", nameIn)
+    ]), [
+      { label: "Cancel", kind: "ghost" },
+      { label: "Add", kind: "primary", onClick: function () {
+        var name = nameIn.value.trim();
+        if (!name) { ui.toast("Name your habit", "err"); return true; }
+        window.MM.store.addHabit(name, emojiIn.value.trim() || "✅");
+        renderTracker();
+      } }
+    ]);
   }
 
   function logRow(e) {
@@ -1057,7 +1251,7 @@ window.MM.app = (function () {
       var seen = {};
       without.forEach(function (p) {
         if (seen[p.name]) return; seen[p.name] = true;
-        chips.appendChild(el("button", { class: "chip", onclick: function () { quickRequest(p); renderRequests(); } }, "➕ " + p.name));
+        chips.appendChild(el("button", { class: "chip add", onclick: function () { quickRequest(p); renderRequests(); } }, "➕ " + p.name));
       });
       root.appendChild(el("div", { class: "card" }, [
         el("div", { class: "section-label" }, "Spotted near you without data"),
