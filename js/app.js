@@ -397,6 +397,7 @@ window.MM.app = (function () {
    * ===================================================================== */
 
   var mapReady = false;
+  var discoverSetMode = null; // set in renderDiscover; lets runSearch auto-switch to the list on mobile
   function renderDiscover() {
     var root = document.getElementById("view-discover");
     if (root.getAttribute("data-built") === "1") {
@@ -425,11 +426,29 @@ window.MM.app = (function () {
     ]);
     root.appendChild(controls);
 
+    // Mobile-only Map/List toggle (hidden on desktop via CSS, where both show).
+    var viewToggle = el("div", { class: "map-toggle" }, [
+      el("button", { class: "mt-btn active", type: "button", "data-mt": "map" }, "🗺 Map"),
+      el("button", { class: "mt-btn", type: "button", "data-mt": "list" }, "📋 List")
+    ]);
+    root.appendChild(viewToggle);
+
     var layout = el("div", { class: "discover-layout" }, [
       el("div", { id: "map", class: "map" }),
       el("div", { id: "place-list", class: "place-list" }, [emptyHint("Search to see nearby places.")])
     ]);
     root.appendChild(layout);
+
+    discoverSetMode = function (mode) {
+      layout.classList.toggle("show-list", mode === "list");
+      viewToggle.querySelectorAll(".mt-btn").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-mt") === mode);
+      });
+      if (mode === "map") window.MM.map.invalidate();
+    };
+    viewToggle.querySelectorAll(".mt-btn").forEach(function (b) {
+      b.addEventListener("click", function () { discoverSetMode(b.getAttribute("data-mt")); });
+    });
 
     if (!mapReady) { window.MM.map.init("map"); mapReady = true; }
 
@@ -491,6 +510,9 @@ window.MM.app = (function () {
       el("strong", null, places.length + " places nearby"),
       el("span", { class: "muted small" }, withData.length + " with macro data")
     ]));
+
+    // On mobile, surface results immediately by flipping to the List view.
+    if (discoverSetMode && window.matchMedia("(max-width: 640px)").matches) discoverSetMode("list");
 
     if (!places.length) {
       listEl.appendChild(emptyHint("No restaurants found in this area. Try a larger radius."));
