@@ -16,8 +16,10 @@ window.MM.CONFIG = {
   supabaseUrl: "https://gxekdpfxhycjatvtqxfm.supabase.co",
   supabaseAnonKey: "sb_publishable_emaUFLtlVR-uQPUF-9KY6w_MgsENvFD",
 
-  // The account that sees the in-app Admin tab (requests + feedback). This only
+  // Accounts that see the in-app Admin tab (requests + feedback). This only
   // shows/hides UI — actual access is enforced by Row-Level Security keyed to
-  // this email (see supabase/admin-schema.sql). Leave blank to disable Admin.
-  adminEmail: "zja1999@gmail.com"
+  // these emails (see supabase/admin-schema.sql). Leave empty to disable Admin.
+  adminEmails: [
+    "zja1999@gmail.com"
+  ]
 };
