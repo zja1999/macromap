@@ -104,6 +104,11 @@ body {
 }
 .acct-email { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* "Install app" (PWA) button — accent-outlined, lives in the top bar.
+ * Uses .btn.install-btn so it overrides the base .btn colors defined later. */
+.btn.install-btn { white-space: nowrap; border-color: var(--accent); color: var(--accent-dark); background: var(--surface); }
+.btn.install-btn:hover { background: var(--accent-soft); }
+
 .auth-form { display: flex; flex-direction: column; gap: 12px; }
 .auth-msg { font-size: 13px; min-height: 0; }
 .auth-msg:empty { display: none; }
@@ -456,6 +461,8 @@ textarea.input { resize: vertical; }
   .acct-email { display: none; }
   .acct-chip { padding: 6px; }
   .acct-chip.local { padding: 6px 11px; }
+  .install-btn .ib-extra { display: none; } /* "⬇ Install" — save space next to brand/account */
+  .install-btn { padding: 7px 10px; }
 
   /* --- bottom tab bar --- */
   .nav {

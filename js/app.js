@@ -1714,6 +1714,83 @@ window.MM.app = (function () {
         console.warn("Macro Map: service worker registration failed.", e);
       });
     }
+
+    setupInstall();
+  }
+
+  /* ------------------------------------------------------------- PWA install */
+
+  // "Install app" button in the top bar. Uses the native beforeinstallprompt
+  // flow where supported (Chrome/Edge/Android); elsewhere (notably iOS Safari)
+  // it opens platform-specific "add to home screen" instructions. Hidden once
+  // the app is already installed / running standalone.
+  function setupInstall() {
+    var btn = document.getElementById("install-btn");
+    if (!btn) return;
+
+    var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+      window.navigator.standalone === true;
+    if (standalone) return; // already installed — leave it hidden
+
+    var ua = navigator.userAgent || "";
+    var isIOS = /iphone|ipad|ipod/i.test(ua) ||
+      (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); // iPadOS reports as Mac
+    var deferred = null;
+
+    // Capture the install prompt so we can trigger it from our own button.
+    window.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault();
+      deferred = e;
+      btn.classList.remove("hidden");
+    });
+
+    // The native event never fires on iOS, so show the button there too and
+    // guide the user through Safari's manual install.
+    if (isIOS) btn.classList.remove("hidden");
+
+    btn.addEventListener("click", function () {
+      if (deferred) {
+        deferred.prompt();
+        deferred.userChoice.then(function (res) {
+          if (res && res.outcome === "accepted") btn.classList.add("hidden");
+          deferred = null;
+        });
+      } else {
+        showInstallHelp(isIOS);
+      }
+    });
+
+    window.addEventListener("appinstalled", function () {
+      btn.classList.add("hidden");
+      deferred = null;
+      ui.toast("Macro Map installed — find it on your home screen", "ok");
+    });
+  }
+
+  function showInstallHelp(isIOS) {
+    var body;
+    if (isIOS) {
+      body = el("div", { class: "help-body" }, [
+        el("p", null, "To install Macro Map on your iPhone or iPad:"),
+        el("ol", null, [
+          el("li", { html: "Open this page in <b>Safari</b> (install isn't available in Chrome/Firefox on iOS)." }),
+          el("li", { html: "Tap the <b>Share</b> button (the square with an up-arrow)." }),
+          el("li", { html: "Scroll down and tap <b>Add to Home Screen</b>." }),
+          el("li", { html: "Tap <b>Add</b> — Macro Map will appear as an app icon." })
+        ])
+      ]);
+    } else {
+      body = el("div", { class: "help-body" }, [
+        el("p", null, "Your browser didn't offer a one-tap install. You can still add Macro Map as an app:"),
+        el("ul", null, [
+          el("li", { html: "<b>Chrome / Edge (desktop):</b> click the install icon in the address bar, or menu (⋮) → “Install Macro Map”." }),
+          el("li", { html: "<b>Chrome (Android):</b> menu (⋮) → “Add to Home screen” / “Install app”." }),
+          el("li", { html: "<b>Safari (Mac):</b> File → “Add to Dock”." })
+        ]),
+        el("p", { class: "muted small" }, "Tip: Chrome and Edge offer the smoothest one-tap install.")
+      ]);
+    }
+    ui.modal("Install Macro Map", body, [{ label: "Got it", kind: "primary" }]);
   }
 
   return {
