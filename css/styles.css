@@ -332,7 +332,7 @@ textarea.input { resize: vertical; }
 .micro-label { font-size: 12px; color: var(--muted); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.chip { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
+.chip { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .chip:hover { border-color: var(--accent); }
 .chip.meal { background: var(--accent-soft); color: var(--accent-dark); border-color: transparent; }
 /* "Spotted near you without data" request chips — filled accent so the white label reads clearly in both themes */
