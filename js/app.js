@@ -1244,13 +1244,21 @@ window.MM.app = (function () {
     root.appendChild(header("Missing a restaurant?",
       "Our database is growing. If a chain near you has no macro data, request it and we'll prioritize adding it."));
 
-    // nearby-without-data quick chips
-    var without = state.nearbyPlaces.filter(function (p) { return !p.hasData; });
+    // nearby-without-data quick chips — hide any chain the user has already
+    // requested (so they vanish on click and stay gone on a later visit).
+    var requested = {};
+    window.MM.store.getRequests().forEach(function (r) {
+      requested[(r.chain || "").trim().toLowerCase()] = true;
+    });
+    var without = state.nearbyPlaces.filter(function (p) {
+      return !p.hasData && !requested[(p.name || "").trim().toLowerCase()];
+    });
     if (without.length) {
       var chips = el("div", { class: "chips" });
       var seen = {};
       without.forEach(function (p) {
-        if (seen[p.name]) return; seen[p.name] = true;
+        var key = (p.name || "").trim().toLowerCase();
+        if (seen[key]) return; seen[key] = true;
         chips.appendChild(el("button", { class: "chip add", onclick: function () { quickRequest(p); renderRequests(); } }, "➕ " + p.name));
       });
       root.appendChild(el("div", { class: "card" }, [
