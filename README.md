@@ -109,6 +109,10 @@ Add a chain by adding its rows; add items by adding rows with an existing `chain
 
 When a user taps **Request** (Discover) or submits the **Add Data** form, the request is saved to their own list **and** inserted into the central **`data_requests`** table. Review them in Supabase → **Table Editor → data_requests**; flip `status` from `open` to `added`/`declined` as you work through them.
 
+### User feedback
+
+The footer **Send feedback** button writes to a **`feedback`** table (message, category, the view it came from, and user if signed in). Create it once by running [`supabase/feedback-schema.sql`](supabase/feedback-schema.sql), then read submissions in Supabase → **Table Editor → feedback**. Both requests and feedback are validated and rate-limited client-side to deter spam.
+
 ## Deploy (static hosting)
 
 Because it's just static files, you can host it free on any static host — no server needed:
