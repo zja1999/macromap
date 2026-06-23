@@ -265,7 +265,10 @@ window.MM.data = (function () {
       var nums = {};
       NUMERIC_COLS.forEach(function (col) {
         var raw = String(row[col] == null ? "" : row[col]).trim();
-        var v = raw === "" ? 0 : Number(raw);
+        // Tolerate thousands separators / stray spaces from Excel/Sheets exports
+        // (e.g. "1,200" or "1 200") so valid data doesn't hard-fail.
+        var cleaned = raw.replace(/[,\s]/g, "");
+        var v = cleaned === "" ? 0 : Number(cleaned);
         if (isNaN(v)) { errors.push("Line " + line + " (" + name + "): \"" + col + "\" is not a number: \"" + raw + "\""); v = 0; }
         nums[col] = v;
       });
@@ -304,7 +307,12 @@ window.MM.data = (function () {
     if (!chainIds.length) return Promise.resolve({});
     var inList = chainIds.map(function (c) { return '"' + String(c).replace(/"/g, "") + '"'; }).join(",");
     return fetch(cfg().supabaseUrl + "/rest/v1/menu_items?select=id&chain_id=in.(" + encodeURIComponent(inList) + ")", { headers: authHeaders() })
-      .then(function (r) { return r.json(); })
+      // Fail loudly on a bad read — a swallowed error here would skip duplicate
+      // detection and let us write items that already exist.
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error("Couldn't check for existing items (server " + r.status + "). Nothing was uploaded. " + (t || "")); });
+        return r.json();
+      })
       .then(function (rows) {
         var m = {};
         (Array.isArray(rows) ? rows : []).forEach(function (x) { m[x.id] = true; });
@@ -324,15 +332,21 @@ window.MM.data = (function () {
   function insertItemsBatched(items) {
     var BATCH = 200, chunks = [];
     for (var i = 0; i < items.length; i += BATCH) chunks.push(items.slice(i, i + BATCH));
+    var inserted = 0;
     return chunks.reduce(function (p, chunk) {
       return p.then(function () {
         return fetch(cfg().supabaseUrl + "/rest/v1/menu_items", {
           method: "POST",
           headers: Object.assign({ "Content-Type": "application/json", Prefer: "return=minimal" }, authHeaders()),
           body: JSON.stringify(chunk)
-        }).then(checkOk);
+        }).then(checkOk).then(function () { inserted += chunk.length; });
       });
-    }, Promise.resolve());
+    }, Promise.resolve()).catch(function (err) {
+      // Writes aren't transactional; remember how many rows made it in so the
+      // caller can tell the admin exactly how to recover.
+      err.insertedCount = inserted;
+      throw err;
+    });
   }
 
   function insertUploadLog(summary) {
@@ -383,6 +397,17 @@ window.MM.data = (function () {
               filename: (file && file.name) || null
             };
             return insertUploadLog(summary).then(function () { return summary; });
+          })
+          .catch(function (err) {
+            // A mid-batch failure leaves a partial import (no transaction). Tell
+            // the admin what landed and how to finish — re-uploading lists the
+            // already-saved items so they can drop those rows and upload the rest.
+            var done = err && err.insertedCount;
+            if (typeof done === "number" && done > 0 && done < built.items.length) {
+              throw new Error("Upload interrupted after saving " + done + " of " + built.items.length +
+                " items — the rest were not added. Re-upload this same file: it will list the items that already exist; remove those rows and upload the remainder. (" + (err.message || "error") + ")");
+            }
+            throw err;
           });
       });
     });

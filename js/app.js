@@ -20,6 +20,22 @@ window.MM.app = (function () {
     profileEditing: false    // whether the profile form is expanded for editing
   };
 
+  // PWA install state. The listeners are registered at module-eval time (below)
+  // rather than inside start() — Chrome can fire `beforeinstallprompt` before
+  // DOMContentLoaded, and a late listener would miss it.
+  var deferredInstallPrompt = null;
+  var installBtnRef = null;
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (installBtnRef) installBtnRef.classList.remove("hidden");
+  });
+  window.addEventListener("appinstalled", function () {
+    deferredInstallPrompt = null;
+    if (installBtnRef) installBtnRef.classList.add("hidden");
+    if (window.MM.ui) window.MM.ui.toast("Macro Map installed — find it on your home screen", "ok");
+  });
+
   var VIEWS = [
     { id: "profile",   label: "Profile",   icon: "👤" },
     { id: "discover",  label: "Discover",  icon: "📍" },
@@ -525,7 +541,7 @@ window.MM.app = (function () {
       // by distance) so every distinct missing chain shows — no arbitrary cap.
       var seen = {};
       var uniqueWithout = without.filter(function (p) {
-        var key = p.name.toLowerCase();
+        var key = (p.name || "").trim().toLowerCase();
         if (seen[key]) return false;
         seen[key] = true;
         return true;
@@ -1365,12 +1381,7 @@ window.MM.app = (function () {
     root.appendChild(reqCard);
     root.appendChild(fbCard);
 
-    window.MM.data.fetchUploadLog().then(function (rows) {
-      var host = document.getElementById("admin-uploads"); if (!host) return;
-      ui.clear(host);
-      if (!rows || !rows.length) { host.appendChild(emptyHint("No uploads yet.")); return; }
-      rows.forEach(function (u) { host.appendChild(adminUploadRow(u)); });
-    }).catch(function (e) { adminError("admin-uploads", e); });
+    refreshUploadLog();
 
     window.MM.data.fetchRequests().then(function (rows) {
       var host = document.getElementById("admin-requests"); if (!host) return;
@@ -1452,11 +1463,7 @@ window.MM.app = (function () {
         btn.disabled = false;
         // refresh the shared menu DB in place, then reload the changelog
         window.MM.data.loadNutrition(function () {});
-        window.MM.data.fetchUploadLog().then(function (rows) {
-          var host = document.getElementById("admin-uploads"); if (!host) return;
-          ui.clear(host);
-          (rows || []).forEach(function (u) { host.appendChild(adminUploadRow(u)); });
-        }).catch(function () {});
+        refreshUploadLog();
       }).catch(function (e) {
         status.className = "upload-status err";
         status.textContent = e.message || "Upload failed.";
@@ -1467,6 +1474,15 @@ window.MM.app = (function () {
     card.appendChild(el("div", { class: "upload-row" }, [fileIn, btn]));
     card.appendChild(status);
     return card;
+  }
+
+  function refreshUploadLog() {
+    window.MM.data.fetchUploadLog().then(function (rows) {
+      var host = document.getElementById("admin-uploads"); if (!host) return;
+      ui.clear(host);
+      if (!rows || !rows.length) { host.appendChild(emptyHint("No uploads yet.")); return; }
+      rows.forEach(function (u) { host.appendChild(adminUploadRow(u)); });
+    }).catch(function (e) { adminError("admin-uploads", e); });
   }
 
   function adminUploadRow(u) {
@@ -1806,38 +1822,25 @@ window.MM.app = (function () {
       window.navigator.standalone === true;
     if (standalone) return; // already installed — leave it hidden
 
+    installBtnRef = btn; // hand the button to the early install listeners
+
     var ua = navigator.userAgent || "";
     var isIOS = /iphone|ipad|ipod/i.test(ua) ||
       (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); // iPadOS reports as Mac
-    var deferred = null;
 
-    // Capture the install prompt so we can trigger it from our own button.
-    window.addEventListener("beforeinstallprompt", function (e) {
-      e.preventDefault();
-      deferred = e;
-      btn.classList.remove("hidden");
-    });
-
-    // The native event never fires on iOS, so show the button there too and
-    // guide the user through Safari's manual install.
-    if (isIOS) btn.classList.remove("hidden");
+    // The prompt may already have fired before boot; iOS never fires it at all.
+    if (deferredInstallPrompt || isIOS) btn.classList.remove("hidden");
 
     btn.addEventListener("click", function () {
-      if (deferred) {
-        deferred.prompt();
-        deferred.userChoice.then(function (res) {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice.then(function (res) {
           if (res && res.outcome === "accepted") btn.classList.add("hidden");
-          deferred = null;
+          deferredInstallPrompt = null;
         });
       } else {
         showInstallHelp(isIOS);
       }
-    });
-
-    window.addEventListener("appinstalled", function () {
-      btn.classList.add("hidden");
-      deferred = null;
-      ui.toast("Macro Map installed — find it on your home screen", "ok");
     });
   }
 
