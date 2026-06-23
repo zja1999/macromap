@@ -722,6 +722,7 @@ window.MM.app = (function () {
 
     function draw() {
       var chain = window.MM.getChainById(state.selectedChainId);
+      var savedY = window.scrollY;
       ui.clear(listWrap);
       var q = searchInput.value.trim().toLowerCase();
       var sort = sortSel.value;
@@ -743,8 +744,9 @@ window.MM.app = (function () {
         return (b.protein / b.kcal) - (a.protein / a.kcal); // ppc
       });
 
-      if (!items.length) { listWrap.appendChild(emptyHint("No items match.")); return; }
+      if (!items.length) { listWrap.appendChild(emptyHint("No items match.")); window.scrollTo(0, savedY); return; }
       items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw)); });
+      window.scrollTo(0, savedY);
     }
 
     searchInput.addEventListener("input", draw);
@@ -874,6 +876,7 @@ window.MM.app = (function () {
 
   function renderRecommend() {
     var root = document.getElementById("view-recommend");
+    var savedY = window.scrollY;
     ui.clear(root);
     root.appendChild(header("Recommended for you", "Picks ranked by how well they fit your remaining macros today.",
       helpBtn("How recommendations work", recommendHelp())));
@@ -965,6 +968,7 @@ window.MM.app = (function () {
       if (!ranked.length) { results.appendChild(emptyHint("No items match those filters. Loosen them a bit.")); return; }
       ranked.forEach(function (it, i) { results.appendChild(recCard(it, i + 1)); });
     }
+    window.scrollTo(0, savedY);
   }
 
   function recCard(it, rankNum) {
@@ -1018,6 +1022,7 @@ window.MM.app = (function () {
 
   function renderTracker() {
     var root = document.getElementById("view-tracker");
+    var savedY = window.scrollY;
     ui.clear(root);
 
     var tg = window.MM.store.getTargets();
@@ -1112,6 +1117,7 @@ window.MM.app = (function () {
     if (ach) root.appendChild(ach);
 
     renderNavBadge();
+    window.scrollTo(0, savedY);
   }
 
   /* ---------- smart coach insight (reacts to today's remaining macros) ----- */
