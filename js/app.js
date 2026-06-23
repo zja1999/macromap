@@ -20,6 +20,9 @@ window.MM.app = (function () {
     profileEditing: false    // whether the profile form is expanded for editing
   };
 
+  // Set to an error string if loadNutrition() fails; null while loading or after success.
+  var nutritionError = null;
+
   // PWA install state. The listeners are registered at module-eval time (below)
   // rather than inside start() — Chrome can fire `beforeinstallprompt` before
   // DOMContentLoaded, and a late listener would miss it.
@@ -668,6 +671,16 @@ window.MM.app = (function () {
     root.appendChild(header("Browse menus", "Compare items by macros. Add anything straight to your log.",
       helpBtn("Reading the menu", menuHelp())));
 
+    if (!window.MM.NUTRITION || !window.MM.NUTRITION.length) {
+      root.appendChild(noticeCard(
+        nutritionError ? "Couldn't load restaurant data" : "Loading restaurant data…",
+        nutritionError || "Fetching menus from the database — this only takes a moment.",
+        nutritionError ? "Reload" : null,
+        nutritionError ? function () { location.reload(); } : null
+      ));
+      return;
+    }
+
     var chains = window.MM.NUTRITION;
     var nearbyIds = availableChainIds();
     if (!state.selectedChainId) {
@@ -864,6 +877,16 @@ window.MM.app = (function () {
     ui.clear(root);
     root.appendChild(header("Recommended for you", "Picks ranked by how well they fit your remaining macros today.",
       helpBtn("How recommendations work", recommendHelp())));
+
+    if (!window.MM.NUTRITION || !window.MM.NUTRITION.length) {
+      root.appendChild(noticeCard(
+        nutritionError ? "Couldn't load restaurant data" : "Loading restaurant data…",
+        nutritionError || "Fetching menus from the database — this only takes a moment.",
+        nutritionError ? "Reload" : null,
+        nutritionError ? function () { location.reload(); } : null
+      ));
+      return;
+    }
 
     var tg = window.MM.store.getTargets();
     if (!tg) {
@@ -1920,10 +1943,9 @@ window.MM.app = (function () {
     ]);
   }
   function noticeCard(title, body, btn, onClick) {
-    return el("div", { class: "card notice" }, [
-      el("h3", null, title), el("p", { class: "muted" }, body),
-      el("button", { class: "btn primary", onclick: onClick }, btn)
-    ]);
+    var children = [el("h3", null, title), el("p", { class: "muted" }, body)];
+    if (btn) children.push(el("button", { class: "btn primary", onclick: onClick }, btn));
+    return el("div", { class: "card notice" }, children);
   }
   function numOrNull(scope, name) {
     var v = scope.querySelector('[name="' + name + '"]').value;
@@ -2108,9 +2130,13 @@ window.MM.app = (function () {
     });
     window.MM.auth.init();
 
-    // Pull the shared nutrition database from Supabase (falls back to bundled
-    // data). When it arrives, refresh the chain-dependent views in place.
+    // Pull the nutrition database from Supabase. Refresh data-dependent views
+    // when it arrives; show an error in those views if the load fails.
     window.MM.data.loadNutrition(function () {
+      nutritionError = null;
+      if (state.view === "menu" || state.view === "recommend") refreshCurrent();
+    }).catch(function (e) {
+      nutritionError = e.message || "Couldn't reach the server.";
       if (state.view === "menu" || state.view === "recommend") refreshCurrent();
     });
 

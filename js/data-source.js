@@ -1,31 +1,21 @@
 /* Macro Map — shared data source (Supabase).
  *
- * The nutrition database lives in Supabase (`chains` + `menu_items`) so it can
- * grow for everyone without redeploying. This module loads it at runtime and
- * caches it, falling back to the bundled seed in nutrition-data.js if Supabase
- * is unconfigured or unreachable — so the app never breaks. It also routes
- * chain-data requests to the central `data_requests` table.
+ * The nutrition database lives in Supabase (`chains` + `menu_items`) and is
+ * fetched fresh on every session. There is no local fallback — if Supabase is
+ * unreachable or unconfigured the app shows an error so the user knows data is
+ * missing rather than seeing stale information.
  */
 window.MM = window.MM || {};
 
 window.MM.data = (function () {
-  var CACHE_KEY = "macromap.nutrition.v1";
-
   function cfg() { return window.MM.CONFIG || {}; }
   function enabled() { return !!(cfg().supabaseUrl && cfg().supabaseAnonKey); }
   function headers() {
     return { apikey: cfg().supabaseAnonKey, Authorization: "Bearer " + cfg().supabaseAnonKey };
   }
 
-  // Use a cached cloud copy immediately (instant fresh data on load) if present.
-  function applyCache() {
-    try {
-      var raw = localStorage.getItem(CACHE_KEY);
-      if (!raw) return;
-      var arr = JSON.parse(raw);
-      if (Array.isArray(arr) && arr.length) window.MM.NUTRITION = arr;
-    } catch (e) { /* ignore — keep bundled seed */ }
-  }
+  // Clear any nutrition data that was cached by a previous version of the app.
+  try { localStorage.removeItem("macromap.nutrition.v1"); } catch (e) {}
 
   // Turn the two flat tables into the nested chain/items shape the app expects.
   function assemble(chains, items) {
@@ -46,25 +36,40 @@ window.MM.data = (function () {
       .filter(function (c) { return c.items.length; });
   }
 
-  // Pull the latest database from Supabase, replace MM.NUTRITION, cache it.
+  // Pull the latest nutrition database from Supabase and populate MM.NUTRITION.
+  // Rejects with a user-readable Error if Supabase is unconfigured, unreachable,
+  // or returns an empty dataset — the caller is responsible for showing an error.
   function loadNutrition(onUpdate) {
-    if (!enabled()) return Promise.resolve(false);
+    if (!enabled()) {
+      return Promise.reject(new Error(
+        "Supabase is not configured. Add your project URL and anon key to js/config.js."
+      ));
+    }
     var base = cfg().supabaseUrl + "/rest/v1/";
     return Promise.all([
-      fetch(base + "chains?select=*", { headers: headers() }).then(function (r) { return r.json(); }),
-      fetch(base + "menu_items?select=*&order=chain_id", { headers: headers() }).then(function (r) { return r.json(); })
+      fetch(base + "chains?select=*", { headers: headers() }).then(function (r) {
+        if (!r.ok) throw new Error("Chains table request failed (" + r.status + ").");
+        return r.json();
+      }),
+      fetch(base + "menu_items?select=*&order=chain_id", { headers: headers() }).then(function (r) {
+        if (!r.ok) throw new Error("Menu items request failed (" + r.status + ").");
+        return r.json();
+      })
     ]).then(function (res) {
       var chains = res[0], items = res[1];
-      if (!Array.isArray(chains) || !Array.isArray(items) || !chains.length) return false;
+      if (!Array.isArray(chains) || !Array.isArray(items) || !chains.length) {
+        throw new Error("No restaurant data found in the database. Upload a CSV from the Admin tab.");
+      }
       var assembled = assemble(chains, items);
-      if (!assembled.length) return false;
+      if (!assembled.length) {
+        throw new Error("Chains exist but have no menu items. Upload items from the Admin tab.");
+      }
       window.MM.NUTRITION = assembled;
-      try { localStorage.setItem(CACHE_KEY, JSON.stringify(assembled)); } catch (e) { /* quota */ }
       if (onUpdate) onUpdate(assembled);
       return true;
     }).catch(function (e) {
-      console.warn("Macro Map: couldn't load nutrition from Supabase; using bundled/cached data.", e);
-      return false;
+      console.warn("Macro Map: nutrition load failed.", e);
+      throw e; // propagate so callers can show an error UI
     });
   }
 
@@ -424,8 +429,6 @@ window.MM.data = (function () {
       return true;
     });
   }
-
-  applyCache();
 
   return {
     loadNutrition: loadNutrition,
