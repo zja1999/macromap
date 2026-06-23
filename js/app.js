@@ -1430,6 +1430,9 @@ window.MM.app = (function () {
     ]));
     card.appendChild(el("p", { class: "muted small" },
       "Upload a CSV or Excel file matching the template. The file is validated first — if any item is duplicated in the file or already exists in the database, nothing is added and you'll see what to fix."));
+    card.appendChild(el("p", { class: "muted small", html:
+      "<b>Required columns:</b> chain_id, chain_name, name, kcal, protein, carbs, fat, sodium, fiber, sugar. " +
+      "<b>Optional:</b> chain_color, match, category (safe to leave blank)." }));
 
     var fileIn = el("input", { type: "file", class: "input file-input", accept: ".csv,.xlsx,.xls,text/csv" });
     var btn = el("button", { class: "btn primary", type: "button" }, "Upload & process");
