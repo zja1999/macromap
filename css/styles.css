@@ -416,6 +416,15 @@ textarea.input { resize: vertical; }
 .admin-main { min-width: 0; flex: 1; }
 .admin-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 .fb-msg { margin-top: 3px; white-space: pre-wrap; }
+.upload-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.file-input { flex: 1; min-width: 200px; padding: 8px 10px; cursor: pointer; }
+.file-input::file-selector-button { font: inherit; font-weight: 600; margin-right: 10px; padding: 6px 11px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.upload-status { margin-top: 12px; font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
+.upload-status:empty { display: none; }
+.upload-status.busy { color: var(--muted); }
+.upload-status.ok { color: var(--accent-dark); font-weight: 600; }
+.upload-status.err { color: var(--danger); }
+.upload-chains { margin-top: 2px; }
 
 /* ----------------------------------------------------------- misc */
 .empty-hint { color: var(--muted); font-size: 14px; padding: 18px; text-align: center; background: var(--surface-2); border: 1px dashed var(--border); border-radius: var(--radius-sm); }

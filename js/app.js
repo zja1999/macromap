@@ -1356,8 +1356,21 @@ window.MM.app = (function () {
       el("div", { class: "section-label" }, "Feedback"),
       el("div", { id: "admin-feedback" }, [emptyHint("Loading…")])
     ]);
+    root.appendChild(uploadCard());
+    var uploadsCard = el("div", { class: "card" }, [
+      el("div", { class: "section-label" }, "Upload history"),
+      el("div", { id: "admin-uploads" }, [emptyHint("Loading…")])
+    ]);
+    root.appendChild(uploadsCard);
     root.appendChild(reqCard);
     root.appendChild(fbCard);
+
+    window.MM.data.fetchUploadLog().then(function (rows) {
+      var host = document.getElementById("admin-uploads"); if (!host) return;
+      ui.clear(host);
+      if (!rows || !rows.length) { host.appendChild(emptyHint("No uploads yet.")); return; }
+      rows.forEach(function (u) { host.appendChild(adminUploadRow(u)); });
+    }).catch(function (e) { adminError("admin-uploads", e); });
 
     window.MM.data.fetchRequests().then(function (rows) {
       var host = document.getElementById("admin-requests"); if (!host) return;
@@ -1406,6 +1419,64 @@ window.MM.app = (function () {
     window.MM.data.updateRequestStatus(id, status)
       .then(function () { ui.toast("Marked " + status, "ok"); renderAdmin(); })
       .catch(function (e) { ui.toast(e.message, "err"); });
+  }
+
+  /* ---- admin: bulk nutrition upload ---- */
+  function uploadCard() {
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { class: "list-head" }, [
+      el("strong", null, "Upload nutrition data"),
+      el("a", { class: "btn small ghost", href: "data/menu_template.csv", download: "macromap_menu_template.csv" }, "⬇ Template")
+    ]));
+    card.appendChild(el("p", { class: "muted small" },
+      "Upload a CSV or Excel file matching the template. The file is validated first — if any item is duplicated in the file or already exists in the database, nothing is added and you'll see what to fix."));
+
+    var fileIn = el("input", { type: "file", class: "input file-input", accept: ".csv,.xlsx,.xls,text/csv" });
+    var btn = el("button", { class: "btn primary", type: "button" }, "Upload & process");
+    var status = el("div", { class: "upload-status" });
+
+    btn.addEventListener("click", function () {
+      var f = fileIn.files && fileIn.files[0];
+      if (!f) { ui.toast("Choose a file first", "err"); return; }
+      btn.disabled = true;
+      status.className = "upload-status busy";
+      status.textContent = "Processing " + f.name + "…";
+      window.MM.data.uploadNutrition(f).then(function (sum) {
+        status.className = "upload-status ok";
+        status.textContent = "✅ Added " + sum.item_count + " item(s) across " + sum.chain_count +
+          " chain(s): " + sum.chains;
+        fileIn.value = "";
+        btn.disabled = false;
+        // refresh the shared menu DB in place, then reload the changelog
+        window.MM.data.loadNutrition(function () {});
+        window.MM.data.fetchUploadLog().then(function (rows) {
+          var host = document.getElementById("admin-uploads"); if (!host) return;
+          ui.clear(host);
+          (rows || []).forEach(function (u) { host.appendChild(adminUploadRow(u)); });
+        }).catch(function () {});
+      }).catch(function (e) {
+        status.className = "upload-status err";
+        status.textContent = e.message || "Upload failed.";
+        btn.disabled = false;
+      });
+    });
+
+    card.appendChild(el("div", { class: "upload-row" }, [fileIn, btn]));
+    card.appendChild(status);
+    return card;
+  }
+
+  function adminUploadRow(u) {
+    return el("div", { class: "admin-row" }, [
+      el("div", { class: "admin-main" }, [
+        el("div", { class: "item-name" }, [
+          (u.uploader_email || "unknown"), " ",
+          ui.badge(u.item_count + " items · " + u.chain_count + " chains", "ok")
+        ]),
+        el("div", { class: "muted small" }, prettyDateTime(u.created_at) + (u.filename ? " · " + u.filename : "")),
+        u.chains ? el("div", { class: "muted small upload-chains" }, u.chains) : null
+      ])
+    ]);
   }
 
   function adminFeedbackRow(f) {

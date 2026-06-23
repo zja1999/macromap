@@ -5,28 +5,39 @@
 -- to delete requests/feedback. Everyone else stays limited to their own rows
 -- from the earlier schema files.
 --
--- IMPORTANT: keep the email list below in sync with `adminEmails` in
--- js/config.js. Run this file in Supabase → SQL Editor after edits.
+-- ADDING AN ADMIN: edit the email list in public.is_admin() below (and the
+-- matching `adminEmails` array in js/config.js), then run this file in
+-- Supabase → SQL Editor. Every admin policy in the app routes through
+-- is_admin(), so this one list is the single source of truth for the database.
+
+-- Single source of truth for who is an admin. Used by every admin policy here
+-- and in upload-schema.sql.
+create or replace function public.is_admin()
+returns boolean language sql stable as $$
+  select coalesce((auth.jwt() ->> 'email') in (
+    'zja1999@gmail.com',
+    'rannyalex15@gmail.com'
+  ), false);
+$$;
 
 -- Admins can read every chain request, and update their status (open/added/declined).
 drop policy if exists "data_requests_admin_read" on public.data_requests;
 create policy "data_requests_admin_read" on public.data_requests
-  for select using ((auth.jwt() ->> 'email') in ('zja1999@gmail.com', 'rannyalex15@gmail.com'));
+  for select using (public.is_admin());
 
 drop policy if exists "data_requests_admin_update" on public.data_requests;
 create policy "data_requests_admin_update" on public.data_requests
-  for update using ((auth.jwt() ->> 'email') in ('zja1999@gmail.com', 'rannyalex15@gmail.com'))
-  with check ((auth.jwt() ->> 'email') in ('zja1999@gmail.com', 'rannyalex15@gmail.com'));
+  for update using (public.is_admin()) with check (public.is_admin());
 
 drop policy if exists "data_requests_admin_delete" on public.data_requests;
 create policy "data_requests_admin_delete" on public.data_requests
-  for delete using ((auth.jwt() ->> 'email') in ('zja1999@gmail.com', 'rannyalex15@gmail.com'));
+  for delete using (public.is_admin());
 
 -- Admins can read and delete all feedback.
 drop policy if exists "feedback_admin_read" on public.feedback;
 create policy "feedback_admin_read" on public.feedback
-  for select using ((auth.jwt() ->> 'email') in ('zja1999@gmail.com', 'rannyalex15@gmail.com'));
+  for select using (public.is_admin());
 
 drop policy if exists "feedback_admin_delete" on public.feedback;
 create policy "feedback_admin_delete" on public.feedback
-  for delete using ((auth.jwt() ->> 'email') in ('zja1999@gmail.com', 'rannyalex15@gmail.com'));
+  for delete using (public.is_admin());

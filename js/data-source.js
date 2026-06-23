@@ -198,6 +198,197 @@ window.MM.data = (function () {
   }
   function fetchRequests() { return getJSON("data_requests?select=*&order=created_at.desc&limit=200"); }
   function fetchFeedback() { return getJSON("feedback?select=*&order=created_at.desc&limit=200"); }
+
+  /* ---- admin: bulk nutrition upload (CSV / Excel) ----
+   * Parses a formatted spreadsheet in the browser, validates it, rejects
+   * duplicates (within the file or already in the database) BEFORE writing,
+   * then upserts chains + inserts items and records the upload in upload_log.
+   * Writes run as the signed-in admin (authHeaders), gated by is_admin() RLS. */
+  var REQUIRED_COLS = ["chain_id", "chain_name", "name", "kcal", "protein", "carbs", "fat", "sodium", "fiber", "sugar"];
+  var NUMERIC_COLS = ["kcal", "protein", "carbs", "fat", "sodium", "fiber", "sugar"];
+
+  function uploadSlug(t) {
+    var s = String(t == null ? "" : t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return s || "item";
+  }
+
+  // Lazy-load SheetJS only when an admin actually uploads (keeps it off the
+  // critical path for everyone else). Handles .xlsx/.xls and .csv uniformly.
+  var xlsxPromise = null;
+  function loadXLSX() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (xlsxPromise) return xlsxPromise;
+    xlsxPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+      s.onload = function () { window.XLSX ? resolve(window.XLSX) : reject(new Error("Spreadsheet parser failed to load.")); };
+      s.onerror = function () { reject(new Error("Couldn't load the spreadsheet parser — check your connection and retry.")); };
+      document.head.appendChild(s);
+    });
+    return xlsxPromise;
+  }
+
+  function readRows(file) {
+    return loadXLSX().then(function (XLSX) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          try {
+            var wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+            var sheet = wb.Sheets[wb.SheetNames[0]];
+            if (!sheet) { reject(new Error("That file has no readable sheet.")); return; }
+            resolve(XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false }));
+          } catch (err) { reject(new Error("Couldn't read that file — is it a valid CSV or Excel file?")); }
+        };
+        reader.onerror = function () { reject(new Error("Couldn't read the file.")); };
+        reader.readAsArrayBuffer(file);
+      });
+    });
+  }
+
+  // Validate + shape rows into { chains, items, errors, dupesInFile }.
+  function buildFromRows(rows) {
+    if (!rows || !rows.length) return { errors: ["The file has no data rows."] };
+    var headers = Object.keys(rows[0]).map(function (h) { return String(h).trim(); });
+    var missing = REQUIRED_COLS.filter(function (c) { return headers.indexOf(c) === -1; });
+    if (missing.length) {
+      return { errors: ["Missing required column(s): " + missing.join(", ") + ". Download the template and match its header row exactly."] };
+    }
+
+    var chains = {}, items = [], errors = [], idSeen = {}, dupes = [];
+    rows.forEach(function (row, idx) {
+      var line = idx + 2; // +1 header, +1 to 1-index
+      var cid = String(row.chain_id == null ? "" : row.chain_id).trim();
+      var name = String(row.name == null ? "" : row.name).trim();
+      if (!cid || !name) { errors.push("Line " + line + ": chain_id and name are required."); return; }
+
+      var nums = {};
+      NUMERIC_COLS.forEach(function (col) {
+        var raw = String(row[col] == null ? "" : row[col]).trim();
+        var v = raw === "" ? 0 : Number(raw);
+        if (isNaN(v)) { errors.push("Line " + line + " (" + name + "): \"" + col + "\" is not a number: \"" + raw + "\""); v = 0; }
+        nums[col] = v;
+      });
+
+      var id = cid + ":" + uploadSlug(name);
+      if (idSeen[id]) dupes.push(name + "  ·  " + cid); else idSeen[id] = true;
+
+      if (!chains[cid]) {
+        var aliases = String(row.match == null ? "" : row.match).split("|")
+          .map(function (a) { return a.trim().toLowerCase(); }).filter(Boolean);
+        if (!aliases.length) aliases = [String(row.chain_name || cid).trim().toLowerCase()];
+        chains[cid] = {
+          id: cid,
+          name: String(row.chain_name || cid).trim(),
+          color: String(row.chain_color == null ? "" : row.chain_color).trim() || null,
+          match: aliases
+        };
+      }
+
+      items.push(Object.assign({ id: id, chain_id: cid, name: name, category: String(row.category == null ? "" : row.category).trim() || null }, nums));
+    });
+    return { errors: errors, chains: chains, items: items, dupesInFile: dupes };
+  }
+
+  function bullets(list, max) {
+    var shown = list.slice(0, max || 15).map(function (x) { return "• " + x; }).join("\n");
+    return shown + (list.length > (max || 15) ? "\n• …and " + (list.length - (max || 15)) + " more" : "");
+  }
+
+  function checkOk(r) {
+    if (!r.ok) return r.text().then(function (t) { throw new Error(t || ("Server error " + r.status)); });
+    return true;
+  }
+
+  function fetchExistingItemIds(chainIds) {
+    if (!chainIds.length) return Promise.resolve({});
+    var inList = chainIds.map(function (c) { return '"' + String(c).replace(/"/g, "") + '"'; }).join(",");
+    return fetch(cfg().supabaseUrl + "/rest/v1/menu_items?select=id&chain_id=in.(" + encodeURIComponent(inList) + ")", { headers: authHeaders() })
+      .then(function (r) { return r.json(); })
+      .then(function (rows) {
+        var m = {};
+        (Array.isArray(rows) ? rows : []).forEach(function (x) { m[x.id] = true; });
+        return m;
+      });
+  }
+
+  function upsertChains(rows) {
+    if (!rows.length) return Promise.resolve();
+    return fetch(cfg().supabaseUrl + "/rest/v1/chains?on_conflict=id", {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }, authHeaders()),
+      body: JSON.stringify(rows)
+    }).then(checkOk);
+  }
+
+  function insertItemsBatched(items) {
+    var BATCH = 200, chunks = [];
+    for (var i = 0; i < items.length; i += BATCH) chunks.push(items.slice(i, i + BATCH));
+    return chunks.reduce(function (p, chunk) {
+      return p.then(function () {
+        return fetch(cfg().supabaseUrl + "/rest/v1/menu_items", {
+          method: "POST",
+          headers: Object.assign({ "Content-Type": "application/json", Prefer: "return=minimal" }, authHeaders()),
+          body: JSON.stringify(chunk)
+        }).then(checkOk);
+      });
+    }, Promise.resolve());
+  }
+
+  function insertUploadLog(summary) {
+    var user = window.MM.auth && window.MM.auth.currentUser && window.MM.auth.currentUser();
+    var payload = Object.assign({
+      uploader_email: user ? user.email : null,
+      uploader_id: user ? user.id : null
+    }, summary);
+    return fetch(cfg().supabaseUrl + "/rest/v1/upload_log", {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json", Prefer: "return=minimal" }, authHeaders()),
+      body: JSON.stringify(payload)
+    }).then(checkOk);
+  }
+
+  // Orchestrates a full upload. Resolves a summary; rejects with a friendly,
+  // multi-line Error (validation problems, in-file dupes, or DB clashes).
+  function uploadNutrition(file) {
+    if (!isAdmin()) return Promise.reject(new Error("Admins only."));
+    if (!enabled()) return Promise.reject(new Error("Cloud connection isn't configured."));
+
+    return readRows(file).then(function (rows) {
+      var built = buildFromRows(rows);
+      if (built.errors && built.errors.length) {
+        throw new Error("The file has " + built.errors.length + " formatting problem(s):\n" + bullets(built.errors, 12));
+      }
+      if (built.dupesInFile && built.dupesInFile.length) {
+        throw new Error("Duplicate items inside the file (same chain + item appears more than once):\n" + bullets(built.dupesInFile) + "\n\nRemove the duplicates and re-upload.");
+      }
+
+      var chainKeys = Object.keys(built.chains);
+      return fetchExistingItemIds(chainKeys).then(function (existing) {
+        var clash = built.items.filter(function (it) { return existing[it.id]; })
+          .map(function (it) { return it.name + "  ·  " + it.chain_id; });
+        if (clash.length) {
+          throw new Error(clash.length + " item(s) already exist in the database:\n" + bullets(clash) +
+            "\n\nNothing was added. Remove those rows (or delete the existing items first) and re-upload.");
+        }
+
+        var chainRows = chainKeys.map(function (k) { return built.chains[k]; });
+        return upsertChains(chainRows)
+          .then(function () { return insertItemsBatched(built.items); })
+          .then(function () {
+            var summary = {
+              item_count: built.items.length,
+              chain_count: chainKeys.length,
+              chains: chainRows.map(function (c) { return c.name; }).join(", "),
+              filename: (file && file.name) || null
+            };
+            return insertUploadLog(summary).then(function () { return summary; });
+          });
+      });
+    });
+  }
+
+  function fetchUploadLog() { return getJSON("upload_log?select=*&order=created_at.desc&limit=100"); }
   function updateRequestStatus(id, status) {
     return fetch(cfg().supabaseUrl + "/rest/v1/data_requests?id=eq." + encodeURIComponent(id), {
       method: "PATCH",
@@ -218,6 +409,8 @@ window.MM.data = (function () {
     isAdmin: isAdmin,
     fetchRequests: fetchRequests,
     fetchFeedback: fetchFeedback,
-    updateRequestStatus: updateRequestStatus
+    updateRequestStatus: updateRequestStatus,
+    uploadNutrition: uploadNutrition,
+    fetchUploadLog: fetchUploadLog
   };
 })();
