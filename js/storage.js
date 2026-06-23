@@ -19,8 +19,19 @@ window.MM.store = (function () {
     lastLocation: null,   // { lat, lng, label }
     weights: {},          // { "YYYY-MM-DD": kg } — body weight log, stored in kg
     habits: null,         // [ { id, name, emoji } ] — null until seeded with defaults
-    habitLog: {}          // { "YYYY-MM-DD": { habitId: true } }
+    habitLog: {},         // { "YYYY-MM-DD": { habitId: true } }
+    favorites: []         // [ { id, name, chainId?, chainName?, kcal, protein, carbs, fat, sodium, fiber, sugar, custom } ]
   };
+
+  // Time-of-day → meal bucket used when adding a log entry without an explicit meal.
+  function defaultMeal(d) {
+    var h = (d ? new Date(d) : new Date()).getHours();
+    if (h < 11) return "breakfast";
+    if (h < 15) return "lunch";
+    if (h < 21) return "dinner";
+    return "snack";
+  }
+  var MEAL_ORDER = ["breakfast", "lunch", "dinner", "snack"];
 
   var DEFAULT_HABITS = [
     { id: "protein", name: "Hit protein goal", emoji: "💪" },
@@ -99,6 +110,12 @@ window.MM.store = (function () {
       var k = dateKey || todayKey();
       if (!state.logs[k]) state.logs[k] = [];
       entry.id = entry.id || ("e" + Date.now() + Math.floor(Math.random() * 1000));
+      // Default the meal bucket from the clock when one isn't supplied. Use the
+      // current time for today, but a sensible "lunch" placeholder when
+      // backfilling a past day (the user can change it inline).
+      if (!entry.meal) {
+        entry.meal = (k === todayKey()) ? defaultMeal() : "lunch";
+      }
       state.logs[k].push(entry);
       // bump frequency counter
       var fk = (entry.chainId || "?") + "::" + entry.name;
@@ -242,6 +259,120 @@ window.MM.store = (function () {
       while (has(day)) { streak++; day = prevDayKey(day); }
       return streak;
     },
+
+    // ---- favorites ("my usual" pinned items, distinct from frequents) ----
+    getFavorites: function () { return state.favorites.slice(); },
+    addFavorite: function (item) {
+      // Normalize to the same shape we use for log entries so a star action can
+      // round-trip directly into the log without remapping fields.
+      var fav = {
+        id: "f" + Date.now() + Math.floor(Math.random() * 1000),
+        name: (item.name || "").trim() || "Custom item",
+        chainId: item.chainId || null,
+        chainName: item.chainName || (item.chainId ? null : "Custom"),
+        kcal: +item.kcal || 0, protein: +item.protein || 0,
+        carbs: +item.carbs || 0, fat: +item.fat || 0,
+        sodium: +item.sodium || 0, fiber: +item.fiber || 0, sugar: +item.sugar || 0,
+        custom: !!item.custom
+      };
+      state.favorites.push(fav);
+      persist();
+      return fav;
+    },
+    removeFavorite: function (id) {
+      state.favorites = state.favorites.filter(function (f) { return f.id !== id; });
+      persist();
+    },
+    // True when a name+chain pair is already pinned (so the UI knows to draw a
+    // filled star). chainId may be null for custom favorites.
+    isFavorited: function (name, chainId) {
+      var n = (name || "").trim().toLowerCase();
+      return state.favorites.some(function (f) {
+        return (f.name || "").trim().toLowerCase() === n &&
+               (f.chainId || null) === (chainId || null);
+      });
+    },
+    // Reverse lookup so a star toggle can remove an existing favorite without
+    // having to know its id.
+    findFavoriteId: function (name, chainId) {
+      var n = (name || "").trim().toLowerCase();
+      var match = state.favorites.filter(function (f) {
+        return (f.name || "").trim().toLowerCase() === n &&
+               (f.chainId || null) === (chainId || null);
+      })[0];
+      return match ? match.id : null;
+    },
+
+    // ---- aggregates for charts + achievements ----
+    // Returns an array of { date, kcal, protein, carbs, fat } for the last `n`
+    // days, ending today. Days without entries report zeros (so charts have
+    // consistent x-axes).
+    recentTotals: function (n) {
+      n = n || 7;
+      var day = todayKey();
+      var out = [];
+      for (var i = 0; i < n; i++) {
+        var entries = state.logs[day] || [];
+        var t = { date: day, kcal: 0, protein: 0, carbs: 0, fat: 0 };
+        entries.forEach(function (e) {
+          var q = e.qty || 1;
+          t.kcal += (e.kcal || 0) * q; t.protein += (e.protein || 0) * q;
+          t.carbs += (e.carbs || 0) * q; t.fat += (e.fat || 0) * q;
+        });
+        out.push(t);
+        day = prevDayKey(day);
+      }
+      return out.reverse();
+    },
+    // Consecutive days (ending today, with today's grace) where the day's
+    // totals met or exceeded a target for the given macro. Used for protein-hit
+    // and similar "habit by outcome" streaks. tolerance lets close-enough days
+    // count (e.g. 0.9 → 90% counts as a hit).
+    hitTargetStreak: function (macro, target, tolerance) {
+      if (!target) return 0;
+      var thresh = target * (tolerance || 1);
+      var day = todayKey();
+      var hit = function (d) {
+        var entries = state.logs[d];
+        if (!entries || !entries.length) return false;
+        var sum = 0;
+        entries.forEach(function (e) { sum += (e[macro] || 0) * (e.qty || 1); });
+        return sum >= thresh;
+      };
+      if (!hit(day)) day = prevDayKey(day); // today still open — grace
+      var streak = 0;
+      while (hit(day)) { streak++; day = prevDayKey(day); }
+      return streak;
+    },
+    // Mirror of hitTargetStreak but for "stay under" macros (calories,
+    // sodium). Days with no entries don't count, so vacuous streaks aren't
+    // awarded for skipped days.
+    underTargetStreak: function (macro, target) {
+      if (!target) return 0;
+      var day = todayKey();
+      var ok = function (d) {
+        var entries = state.logs[d];
+        if (!entries || !entries.length) return false;
+        var sum = 0;
+        entries.forEach(function (e) { sum += (e[macro] || 0) * (e.qty || 1); });
+        return sum <= target;
+      };
+      if (!ok(day)) day = prevDayKey(day);
+      var streak = 0;
+      while (ok(day)) { streak++; day = prevDayKey(day); }
+      return streak;
+    },
+    // Total distinct days with at least one logged entry. Useful for
+    // milestone-style achievements.
+    daysLoggedCount: function () {
+      return Object.keys(state.logs).filter(function (k) {
+        return state.logs[k] && state.logs[k].length;
+      }).length;
+    },
+
+    // expose meal helpers + ordering so the UI doesn't re-derive them
+    MEAL_ORDER: MEAL_ORDER,
+    defaultMeal: defaultMeal,
 
     // ---- sync hooks ----
     // Register a callback fired after every change. Receives (state, { fromSync }).

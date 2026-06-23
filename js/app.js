@@ -45,6 +45,53 @@ window.MM.app = (function () {
     { id: "requests",  label: "Add Data",  icon: "➕" }
   ];
 
+  // Meal-bucket display metadata, ordered to match storage.MEAL_ORDER.
+  var MEAL_META = {
+    breakfast: { label: "Breakfast", emoji: "🍳" },
+    lunch:     { label: "Lunch",     emoji: "🥗" },
+    dinner:    { label: "Dinner",    emoji: "🍽️" },
+    snack:     { label: "Snack",     emoji: "🍿" }
+  };
+
+  // Centralized favorite-toggle: works for any item shape (menu, log, rec).
+  // Returns true if the item is now favorited, false if it was just removed.
+  function toggleFavorite(item) {
+    var existing = window.MM.store.findFavoriteId(item.name, item.chainId || (item.chain && item.chain.id) || null);
+    if (existing) {
+      window.MM.store.removeFavorite(existing);
+      ui.toast("Removed from favorites");
+      return false;
+    }
+    window.MM.store.addFavorite({
+      name: item.name,
+      chainId: item.chainId || (item.chain && item.chain.id) || null,
+      chainName: item.chainName || (item.chain && item.chain.name) || null,
+      kcal: item.kcal, protein: item.protein, carbs: item.carbs, fat: item.fat,
+      sodium: item.sodium, fiber: item.fiber, sugar: item.sugar,
+      custom: !!item.custom
+    });
+    ui.toast("⭐ Added to favorites", "ok");
+    return true;
+  }
+
+  // Reusable star button — clicking it toggles favorite state and re-renders
+  // the host. Caller passes a `rerender` callback so the icon reflects the new
+  // state without a full view rebuild when possible.
+  function starButton(item, rerender) {
+    var on = window.MM.store.isFavorited(item.name, item.chainId || (item.chain && item.chain.id) || null);
+    var btn = el("button", {
+      class: "star-btn" + (on ? " on" : ""),
+      title: on ? "Remove from favorites" : "Add to favorites",
+      "aria-label": on ? "Remove from favorites" : "Add to favorites",
+      onclick: function (ev) {
+        ev.stopPropagation();
+        toggleFavorite(item);
+        if (rerender) rerender();
+      }
+    }, on ? "★" : "☆");
+    return btn;
+  }
+
   // Fitness-goal ordering by weight goal, so the most relevant focus is the
   // default (and listed first) instead of always "Fat loss / cutting".
   var FOCUS_PRIORITY = {
@@ -414,6 +461,7 @@ window.MM.app = (function () {
 
   var mapReady = false;
   var discoverSetMode = null; // set in renderDiscover; lets runSearch auto-switch to the list on mobile
+  var discoverFilters = { withDataOnly: false, fitsOnly: false };
   function renderDiscover() {
     var root = document.getElementById("view-discover");
     if (root.getAttribute("data-built") === "1") {
@@ -441,6 +489,25 @@ window.MM.app = (function () {
       ])
     ]);
     root.appendChild(controls);
+
+    // Discover filters — wired to re-render place list without re-querying the network.
+    var cbData = el("input", { type: "checkbox", id: "filter-data" });
+    if (discoverFilters.withDataOnly) cbData.setAttribute("checked", "checked");
+    var cbFits = el("input", { type: "checkbox", id: "filter-fits" });
+    if (discoverFilters.fitsOnly) cbFits.setAttribute("checked", "checked");
+    var filterRow = el("div", { class: "discover-filters" }, [
+      el("label", { class: "check tiny" }, [cbData, el("span", null, "Only places with data")]),
+      el("label", { class: "check tiny" }, [cbFits, el("span", null, "Only where something fits my macros")])
+    ]);
+    cbData.addEventListener("change", function () {
+      discoverFilters.withDataOnly = cbData.checked;
+      if (state.nearbyPlaces.length) renderPlaceList(state.nearbyPlaces);
+    });
+    cbFits.addEventListener("change", function () {
+      discoverFilters.fitsOnly = cbFits.checked;
+      if (state.nearbyPlaces.length) renderPlaceList(state.nearbyPlaces);
+    });
+    controls.appendChild(filterRow);
 
     // Mobile-only Map/List toggle (hidden on desktop via CSS, where both show).
     var viewToggle = el("div", { class: "map-toggle" }, [
@@ -519,19 +586,36 @@ window.MM.app = (function () {
   function renderPlaceList(places) {
     var listEl = document.getElementById("place-list");
     ui.clear(listEl);
-    var withData = places.filter(function (p) { return p.hasData; });
-    var without = places.filter(function (p) { return !p.hasData; });
+    // Apply active discover filters before splitting into sections.
+    var filtered = places;
+    if (discoverFilters.withDataOnly || discoverFilters.fitsOnly) {
+      filtered = places.filter(function (p) {
+        if (discoverFilters.withDataOnly && !p.hasData) return false;
+        if (discoverFilters.fitsOnly) {
+          var rem = remaining();
+          if (!rem || !p.hasData) return false;
+          var chain = window.MM.getChainById(p.chain.id);
+          return chain && chain.items.some(function (it) { return it.kcal <= rem.kcal; });
+        }
+        return true;
+      });
+    }
+    var isFiltered = filtered.length !== places.length;
+    var withData = filtered.filter(function (p) { return p.hasData; });
+    var without = filtered.filter(function (p) { return !p.hasData; });
 
     listEl.appendChild(el("div", { class: "list-head" }, [
-      el("strong", null, places.length + " places nearby"),
+      el("strong", null, filtered.length + " places" + (isFiltered ? " (filtered)" : " nearby")),
       el("span", { class: "muted small" }, withData.length + " with macro data")
     ]));
 
     // On mobile, surface results immediately by flipping to the List view.
     if (discoverSetMode && window.matchMedia("(max-width: 640px)").matches) discoverSetMode("list");
 
-    if (!places.length) {
-      listEl.appendChild(emptyHint("No restaurants found in this area. Try a larger radius."));
+    if (!filtered.length) {
+      listEl.appendChild(emptyHint(isFiltered
+        ? "No places match the active filters. Try unchecking a filter."
+        : "No restaurants found in this area. Try a larger radius."));
       return;
     }
 
@@ -612,7 +696,8 @@ window.MM.app = (function () {
 
     var fitOnly = el("input", { type: "checkbox", id: "fit-only" });
     var fitLabel = el("label", { class: "check" }, [fitOnly, el("span", null, "Only items that fit my remaining calories")]);
-    controls.appendChild(el("div", { class: "field span2" }, [fitLabel]));
+    var compareHint = el("span", { class: "compare-hint muted small" }, "↔ Tick Compare on items to compare side-by-side");
+    controls.appendChild(el("div", { class: "field span2 menu-foot-row" }, [fitLabel, compareHint]));
 
     root.appendChild(controls);
 
@@ -646,7 +731,7 @@ window.MM.app = (function () {
       });
 
       if (!items.length) { listWrap.appendChild(emptyHint("No items match.")); return; }
-      items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem)); });
+      items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw)); });
     }
 
     searchInput.addEventListener("input", draw);
@@ -666,7 +751,7 @@ window.MM.app = (function () {
     return flags;
   }
 
-  function itemCard(it, rem) {
+  function itemCard(it, rem, redraw) {
     var fits = rem ? it.kcal <= rem.kcal : null;
     var checked = state.compare.some(function (c) { return c.chainId === it.chainId && c.name === it.name; });
 
@@ -675,7 +760,10 @@ window.MM.app = (function () {
         el("div", { class: "item-name" }, it.name),
         el("div", { class: "muted small" }, it.chainName + " · " + (it.category || ""))
       ]),
-      el("div", { class: "item-flags" }, itemFlags(it))
+      el("div", { class: "item-head-right" }, [
+        el("div", { class: "item-flags" }, itemFlags(it)),
+        starButton(it, redraw)
+      ])
     ]);
 
     var foot = el("div", { class: "item-foot" }, [
@@ -865,7 +953,10 @@ window.MM.app = (function () {
           el("div", { class: "muted small" }, it.chainName)
         ])
       ]),
-      el("div", { class: "score", title: "fit score" }, ui.fmt(Math.max(it._score, 0)))
+      el("div", { class: "item-head-right" }, [
+        el("div", { class: "score", title: "fit score" }, ui.fmt(Math.max(it._score, 0))),
+        starButton(it, renderRecommend)
+      ])
     ]);
     var reasons = el("div", { class: "reasons" }, (it._reasons || []).slice(0, 3).map(function (r) {
       var bad = /over|heavy/i.test(r);
@@ -953,6 +1044,10 @@ window.MM.app = (function () {
       microStat("Items", String(entries.length))
     ]));
 
+    // 7-day overview — always shows the trailing week regardless of viewDate.
+    var weekly = weeklyCard();
+    if (weekly) root.appendChild(weekly);
+
     // quick add row
     root.appendChild(quickAddCard());
 
@@ -972,13 +1067,26 @@ window.MM.app = (function () {
     if (!entries.length) {
       logCard.appendChild(emptyHint("Nothing logged yet. Add items from Menus, For You, or quick-add above."));
     } else {
-      entries.forEach(function (e) { logCard.appendChild(logRow(e)); });
+      // Group entries into meal buckets — gives the log breakfast/lunch/dinner/
+      // snack structure, with each bucket showing its own totals. Unknown meals
+      // (legacy entries before the field existed) fall into "lunch" so they're
+      // not stranded at the bottom.
+      var byMeal = { breakfast: [], lunch: [], dinner: [], snack: [] };
+      entries.forEach(function (e) {
+        var m = e.meal && byMeal[e.meal] ? e.meal : "lunch";
+        byMeal[m].push(e);
+      });
+      window.MM.store.MEAL_ORDER.forEach(function (m) {
+        if (byMeal[m].length) logCard.appendChild(mealSection(m, byMeal[m]));
+      });
     }
     root.appendChild(logCard);
 
     // progress: weigh-in + habits
     root.appendChild(weighInCard());
     root.appendChild(habitsCard());
+    var ach = achievementsCard();
+    if (ach) root.appendChild(ach);
 
     renderNavBadge();
   }
@@ -1158,21 +1266,50 @@ window.MM.app = (function () {
 
   function logRow(e) {
     var q = e.qty || 1;
-    var line = el("div", { class: "log-row" }, [
+    var mealSel = el("select", { class: "meal-sel" });
+    window.MM.store.MEAL_ORDER.forEach(function (m) {
+      var opt = el("option", { value: m }, MEAL_META[m].emoji + " " + MEAL_META[m].label);
+      if (m === (e.meal || "lunch")) opt.setAttribute("selected", "selected");
+      mealSel.appendChild(opt);
+    });
+    mealSel.addEventListener("change", function () {
+      window.MM.store.updateLogEntry(e.id, { meal: mealSel.value }, state.viewDate);
+      renderTracker();
+    });
+    return el("div", { class: "log-row" }, [
+      starButton(e, renderTracker),
       el("div", { class: "log-main" }, [
         el("div", { class: "item-name" }, e.name),
         el("div", { class: "muted small" }, e.chainName + " · " + ui.fmt(e.kcal * q) + " cal · P" + ui.fmt(e.protein * q) + " C" + ui.fmt(e.carbs * q) + " F" + ui.fmt(e.fat * q))
       ]),
-      el("div", { class: "qty" }, [
-        el("button", { class: "icon-btn small", onclick: function () { changeQty(e, -1); } }, "–"),
-        el("span", { class: "qty-num" }, "×" + q),
-        el("button", { class: "icon-btn small", onclick: function () { changeQty(e, 1); } }, "+"),
-        el("button", { class: "icon-btn small danger", onclick: function () {
-          window.MM.store.removeLogEntry(e.id, state.viewDate); renderTracker();
-        } }, "✕")
+      el("div", { class: "log-right" }, [
+        mealSel,
+        el("div", { class: "qty" }, [
+          el("button", { class: "icon-btn small", onclick: function () { changeQty(e, -1); } }, "–"),
+          el("span", { class: "qty-num" }, "×" + q),
+          el("button", { class: "icon-btn small", onclick: function () { changeQty(e, 1); } }, "+"),
+          el("button", { class: "icon-btn small danger", onclick: function () {
+            window.MM.store.removeLogEntry(e.id, state.viewDate); renderTracker();
+          } }, "✕")
+        ])
       ])
     ]);
-    return line;
+  }
+
+  // Renders a named meal bucket header (with totals) followed by its log rows.
+  function mealSection(meal, entries) {
+    var meta = MEAL_META[meal] || { label: meal, emoji: "🍽️" };
+    var t = totals(entries);
+    var wrap = el("div", { class: "meal-section" });
+    wrap.appendChild(el("div", { class: "meal-header" }, [
+      el("span", { class: "meal-emoji" }, meta.emoji),
+      el("span", { class: "meal-label" }, meta.label),
+      el("span", { class: "meal-cals muted small" },
+        ui.fmt(Math.round(t.kcal)) + " cal · P" + ui.fmt(Math.round(t.protein)) +
+        " C" + ui.fmt(Math.round(t.carbs)) + " F" + ui.fmt(Math.round(t.fat)))
+    ]));
+    entries.forEach(function (e) { wrap.appendChild(logRow(e)); });
+    return wrap;
   }
 
   function changeQty(e, delta) {
@@ -1184,6 +1321,23 @@ window.MM.app = (function () {
   function quickAddCard() {
     var card = el("div", { class: "card" });
     card.appendChild(el("div", { class: "section-label" }, "Quick add"));
+
+    // Favorites — pinned items for fast re-logging, separate from frequents.
+    var favs = window.MM.store.getFavorites();
+    if (favs.length) {
+      var favChips = el("div", { class: "chips" });
+      favs.forEach(function (fav) {
+        favChips.appendChild(el("button", {
+          class: "chip fav",
+          title: (fav.chainName || "Custom") + " · " + fav.kcal + " cal",
+          onclick: function () { addToLog(fav, 1); }
+        }, "★ " + fav.name));
+      });
+      card.appendChild(el("div", { class: "fav-section" }, [
+        el("div", { class: "fav-label" }, "Favorites"),
+        favChips
+      ]));
+    }
 
     // frequents + saved meals chips
     var chips = el("div", { class: "chips" });
@@ -1270,6 +1424,171 @@ window.MM.app = (function () {
         ui.toast("Saved meal: " + name, "ok"); renderTracker();
       } }
     ]);
+  }
+
+  /* ---------- 7-day weekly overview card --------------------------------- */
+  function weeklyCard() {
+    var tg = window.MM.store.getTargets();
+    if (!tg) return null;
+    var data = window.MM.store.recentTotals(7); // oldest → newest
+
+    var card = el("div", { class: "card weekly-card" });
+    card.appendChild(el("div", { class: "list-head" }, [
+      el("strong", null, "This week"),
+      el("span", { class: "muted small" }, "trailing 7 days")
+    ]));
+    card.appendChild(weeklyChart(data, tg));
+
+    var logged = data.filter(function (d) { return d.kcal > 0; });
+    var avgKcal = logged.length
+      ? Math.round(logged.reduce(function (s, d) { return s + d.kcal; }, 0) / logged.length) : 0;
+    var avgProt = logged.length
+      ? Math.round(logged.reduce(function (s, d) { return s + d.protein; }, 0) / logged.length) : 0;
+    var vsTarget = avgKcal ? avgKcal - tg.kcal : 0;
+
+    card.appendChild(el("div", { class: "weekly-stats" }, [
+      el("div", { class: "ws-stat" }, [
+        el("div", { class: "ws-num" }, avgKcal ? ui.fmt(avgKcal) : "—"),
+        el("div", { class: "ws-label" }, "avg cal/day")
+      ]),
+      el("div", { class: "ws-stat" }, [
+        el("div", { class: "ws-num" }, avgProt ? ui.fmt(avgProt) + "g" : "—"),
+        el("div", { class: "ws-label" }, "avg protein")
+      ]),
+      el("div", { class: "ws-stat" }, [
+        el("div", { class: "ws-num" }, logged.length + "/7"),
+        el("div", { class: "ws-label" }, "days logged")
+      ]),
+      el("div", { class: "ws-stat" }, [
+        el("div", { class: "ws-num" + (!avgKcal ? "" : vsTarget > 0 ? " wover" : " wok") },
+          !avgKcal ? "—"
+            : (vsTarget > 0 ? "+" : "−") + ui.fmt(Math.abs(vsTarget))),
+        el("div", { class: "ws-label" }, "vs cal target")
+      ])
+    ]));
+    return card;
+  }
+
+  function weeklyChart(data, tg) {
+    var W = 320, H = 110, padB = 22, padT = 8;
+    var chartH = H - padT - padB;
+    var n = data.length; // always 7
+    var slotW = W / n;
+    var calBarW = Math.floor(slotW * 0.34);
+    var protBarW = Math.floor(slotW * 0.2);
+    var g = 2;
+
+    var maxCal = 0;
+    data.forEach(function (d) { if (d.kcal > maxCal) maxCal = d.kcal; });
+    maxCal = Math.max(maxCal * 1.1, tg.kcal * 1.2, 1);
+    var yOf = function (v) {
+      return (padT + chartH - Math.min((v / maxCal) * chartH, chartH)).toFixed(1);
+    };
+    var tgY = yOf(tg.kcal);
+
+    var parts = [];
+    // dashed target line
+    parts.push("<line x1='0' x2='" + W + "' y1='" + tgY + "' y2='" + tgY + "' class='wc-target'/>");
+
+    var dayAbbr = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+    var today = window.MM.store.todayKey();
+    data.forEach(function (d, i) {
+      var cx = (i * slotW + slotW / 2).toFixed(1);
+      var lbl = dayAbbr[new Date(d.date + "T00:00:00").getDay()];
+      parts.push("<text x='" + cx + "' y='" + (H - 5) + "' text-anchor='middle' class='wc-lbl" +
+        (d.date === today ? " wc-today" : "") + "'>" + lbl + "</text>");
+      if (d.kcal > 0) {
+        var cH = Math.min((d.kcal / maxCal) * chartH, chartH).toFixed(1);
+        var cY = yOf(d.kcal);
+        var cls = d.kcal > tg.kcal * 1.05 ? "wc-cal wc-over" : "wc-cal";
+        parts.push("<rect x='" + ((+cx) - calBarW - g / 2).toFixed(1) + "' y='" + cY +
+          "' width='" + calBarW + "' height='" + cH + "' class='" + cls + "' rx='2'/>");
+      }
+      if (d.protein > 0 && tg.protein > 0) {
+        var pH = Math.min((d.protein / tg.protein) * chartH, chartH).toFixed(1);
+        var pY = (padT + chartH - +pH).toFixed(1);
+        parts.push("<rect x='" + ((+cx) + g / 2).toFixed(1) + "' y='" + pY +
+          "' width='" + protBarW + "' height='" + pH + "' class='wc-prot' rx='2'/>");
+      }
+    });
+
+    // Weight trendline overlay (only if ≥2 readings fall within the 7-day window).
+    var wAll = window.MM.store.weightSeries();
+    var wWin = wAll.filter(function (w) {
+      return w.date >= data[0].date && w.date <= data[n - 1].date;
+    });
+    if (wWin.length >= 2) {
+      var prof = window.MM.store.getProfile();
+      var metric = prof && prof.units === "metric";
+      var toDisp = metric ? function (k) { return k; } : window.MM.macros.kgToLb;
+      var wVals = wWin.map(function (w) { return toDisp(w.kg); });
+      var wMin = Math.min.apply(null, wVals), wMax = Math.max.apply(null, wVals);
+      var wSpan = (wMax - wMin) || 1;
+      var wPts = [];
+      wWin.forEach(function (w) {
+        var di = -1;
+        for (var j = 0; j < n; j++) { if (data[j].date === w.date) { di = j; break; } }
+        if (di < 0) return;
+        var cx2 = di * slotW + slotW / 2;
+        // Map weight onto the upper 55% of chart height so it doesn't clash with bars.
+        var wy = padT + chartH * 0.1 + ((wMax - toDisp(w.kg)) / wSpan) * chartH * 0.55;
+        wPts.push(cx2.toFixed(1) + "," + wy.toFixed(1));
+      });
+      if (wPts.length >= 2) {
+        parts.push("<polyline points='" + wPts.join(" ") + "' class='wc-wline'/>");
+        wPts.forEach(function (p) {
+          var xy = p.split(",");
+          parts.push("<circle cx='" + xy[0] + "' cy='" + xy[1] + "' r='2.5' class='wc-wdot'/>");
+        });
+      }
+    }
+
+    return el("div", { class: "weekly-chart", html:
+      "<svg viewBox='0 0 " + W + " " + H + "' width='100%' height='" + H +
+      "' xmlns='http://www.w3.org/2000/svg'>" + parts.join("") + "</svg>"
+    });
+  }
+
+  /* ---------- achievement badges ----------------------------------------- */
+  function achievementsCard() {
+    var store = window.MM.store;
+    var tg = store.getTargets();
+    var items = [];
+
+    var logStreak = store.loggingStreak();
+    if (logStreak >= 3) items.push({ emoji: "🔥", val: logStreak + " days", label: "Logging streak" });
+
+    if (tg) {
+      var protStreak = store.hitTargetStreak("protein", tg.protein, 0.9);
+      if (protStreak >= 3) items.push({ emoji: "💪", val: protStreak + " days", label: "Protein goal hit in a row" });
+      var calStreak = store.underTargetStreak("kcal", tg.kcal * 1.05);
+      if (calStreak >= 3) items.push({ emoji: "🎯", val: calStreak + " days", label: "Calories on target" });
+    }
+
+    var total = store.daysLoggedCount();
+    var milestones = [7, 14, 30, 60, 100];
+    var top = milestones.filter(function (m) { return total >= m; }).pop();
+    if (top) items.push({ emoji: "📅", val: total + " days", label: top + "-day milestone" });
+
+    var wLen = store.weightSeries().length;
+    if (wLen >= 5) items.push({ emoji: "⚖️", val: wLen + " entries", label: "Weigh-ins logged" });
+
+    if (!items.length) return null;
+
+    var card = el("div", { class: "card ach-card" });
+    card.appendChild(el("div", { class: "section-label" }, "Achievements"));
+    var grid = el("div", { class: "ach-grid" });
+    items.forEach(function (a) {
+      grid.appendChild(el("div", { class: "ach-item" }, [
+        el("span", { class: "ach-emoji" }, a.emoji),
+        el("div", null, [
+          el("div", { class: "ach-val" }, a.val),
+          el("div", { class: "ach-lbl muted small" }, a.label)
+        ])
+      ]));
+    });
+    card.appendChild(grid);
+    return card;
   }
 
   /* =====================================================================
