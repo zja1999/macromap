@@ -1871,29 +1871,7 @@ window.MM.app = (function () {
   function adminRequestRow(r) {
     var status = r.status || "open";
 
-    // Auto-fetch button: only shown for open requests. Calls the edge function
-    // which uses Claude to compile nutrition data and upload it automatically.
-    var autoBtn = null;
-    if (status === "open") {
-      autoBtn = el("button", { class: "btn small" }, "Auto-fetch");
-      autoBtn.addEventListener("click", function () {
-        autoBtn.disabled = true;
-        autoBtn.textContent = "Fetching…";
-        window.MM.data.fetchChainData(r.id, r.chain).then(function (res) {
-          ui.toast("Added " + res.itemsAdded + " items for " + res.chainName, "ok");
-          window.MM.data.loadNutrition(function () {});
-          refreshUploadLog();
-          renderAdmin();
-        }).catch(function (e) {
-          autoBtn.disabled = false;
-          autoBtn.textContent = "Auto-fetch";
-          ui.toast("Agent: " + e.message, "err");
-        });
-      });
-    }
-
     var actions = el("div", { class: "admin-actions" }, [
-      autoBtn,
       status !== "added" ? el("button", { class: "btn small primary", onclick: function () { setReqStatus(r.id, "added"); } }, "Mark added") : null,
       status !== "declined" ? el("button", { class: "btn small ghost", onclick: function () { setReqStatus(r.id, "declined"); } }, "Decline") : null,
       status !== "open" ? el("button", { class: "btn small ghost", onclick: function () { setReqStatus(r.id, "open"); } }, "Reopen") : null

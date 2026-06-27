@@ -420,23 +420,6 @@ window.MM.data = (function () {
 
   function fetchUploadLog() { return getJSON("upload_log?select=*&order=created_at.desc&limit=100"); }
 
-  // Call the fetch-chain-data edge function to have an AI agent compile and
-  // upload nutritional data for a requested chain automatically.
-  function fetchChainData(requestId, chainName) {
-    if (!isAdmin()) return Promise.reject(new Error("Admins only."));
-    if (!enabled()) return Promise.reject(new Error("Cloud connection required."));
-    return fetch(cfg().supabaseUrl + "/functions/v1/fetch-chain-data", {
-      method: "POST",
-      headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
-      body: JSON.stringify({ requestId: requestId, chainName: chainName })
-    }).then(function (r) {
-      return r.json().then(function (body) {
-        if (!r.ok) throw new Error(body.error || "Agent failed (" + r.status + ")");
-        return body;
-      });
-    });
-  }
-
   function updateRequestStatus(id, status) {
     return fetch(cfg().supabaseUrl + "/rest/v1/data_requests?id=eq." + encodeURIComponent(id), {
       method: "PATCH",
@@ -457,7 +440,6 @@ window.MM.data = (function () {
     fetchFeedback: fetchFeedback,
     updateRequestStatus: updateRequestStatus,
     uploadNutrition: uploadNutrition,
-    fetchUploadLog: fetchUploadLog,
-    fetchChainData: fetchChainData
+    fetchUploadLog: fetchUploadLog
   };
 })();
