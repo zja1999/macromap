@@ -85,12 +85,8 @@ window.MM.data = (function () {
   function throttleCheck() {
     var now = Date.now();
     var log = reqLog().filter(function (t) { return now - t < 86400000; }); // last 24h
-    if (log.length && now - log[log.length - 1] < 8000)
-      return { ok: false, reason: "Easy there — wait a few seconds before requesting again." };
-    if (log.filter(function (t) { return now - t < 600000; }).length >= 8)
-      return { ok: false, reason: "That's a lot of requests at once. Try again in a few minutes." };
-    if (log.length >= 25)
-      return { ok: false, reason: "You've hit the daily request limit. Thanks for the suggestions!" };
+    if (log.length >= 10)
+      return { ok: false, reason: "You've hit the daily request limit of 10. Thanks for the suggestions — check back tomorrow!" };
     return { ok: true };
   }
   function recordSubmission() {
@@ -107,15 +103,19 @@ window.MM.data = (function () {
     if (chain.length > 80) chain = chain.slice(0, 80);
     var note = (req.note || "").trim().slice(0, 280);
 
-    // Don't let the same place be requested twice from this browser.
-    var already = window.MM.store.getRequests().some(function (r) {
-      return (r.chain || "").trim().toLowerCase() === chain.toLowerCase();
-    });
-    if (already) return Promise.reject(new Error("You've already requested \"" + chain + "\"."));
+    var admin = isAdmin();
 
-    var rl = throttleCheck();
-    if (!rl.ok) return Promise.reject(new Error(rl.reason));
-    recordSubmission();
+    // Admins can re-request any chain and are not rate-limited.
+    if (!admin) {
+      var already = window.MM.store.getRequests().some(function (r) {
+        return (r.chain || "").trim().toLowerCase() === chain.toLowerCase();
+      });
+      if (already) return Promise.reject(new Error("You've already requested \"" + chain + "\"."));
+
+      var rl = throttleCheck();
+      if (!rl.ok) return Promise.reject(new Error(rl.reason));
+      recordSubmission();
+    }
 
     var local = window.MM.store.addRequest({ chain: chain, note: note, lat: req.lat, lng: req.lng });
     if (!enabled()) return Promise.resolve(local);
