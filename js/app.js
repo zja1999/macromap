@@ -1927,29 +1927,48 @@ window.MM.app = (function () {
       "<b>Optional:</b> chain_color, match, category (safe to leave blank)." }));
 
     var fileIn = el("input", { type: "file", class: "input file-input", accept: ".csv,.xlsx,.xls,text/csv" });
+    fileIn.multiple = true;
     var btn = el("button", { class: "btn primary", type: "button" }, "Upload & process");
     var status = el("div", { class: "upload-status" });
 
     btn.addEventListener("click", function () {
-      var f = fileIn.files && fileIn.files[0];
-      if (!f) { ui.toast("Choose a file first", "err"); return; }
+      var files = fileIn.files && fileIn.files.length ? Array.from(fileIn.files) : [];
+      if (!files.length) { ui.toast("Choose a file first", "err"); return; }
       btn.disabled = true;
-      status.className = "upload-status busy";
-      status.textContent = "Processing " + f.name + "…";
-      window.MM.data.uploadNutrition(f).then(function (sum) {
-        status.className = "upload-status ok";
-        status.textContent = "✅ Added " + sum.item_count + " item(s) across " + sum.chain_count +
-          " chain(s): " + sum.chains;
-        fileIn.value = "";
-        btn.disabled = false;
-        // refresh the shared menu DB in place, then reload the changelog
-        window.MM.data.loadNutrition(function () {});
-        refreshUploadLog();
-      }).catch(function (e) {
-        status.className = "upload-status err";
-        status.textContent = e.message || "Upload failed.";
-        btn.disabled = false;
-      });
+
+      var results = [], errors = [];
+      var idx = 0;
+
+      function processNext() {
+        if (idx >= files.length) {
+          fileIn.value = "";
+          btn.disabled = false;
+          window.MM.data.loadNutrition(function () {});
+          refreshUploadLog();
+          if (errors.length) {
+            status.className = "upload-status err";
+            status.textContent = errors.join(" | ");
+          } else {
+            status.className = "upload-status ok";
+            status.textContent = "✅ " + results.join(" | ");
+          }
+          return;
+        }
+        var f = files[idx];
+        status.className = "upload-status busy";
+        status.textContent = "Processing " + f.name + " (" + (idx + 1) + "/" + files.length + ")…";
+        window.MM.data.uploadNutrition(f).then(function (sum) {
+          results.push(sum.chains + ": " + sum.item_count + " items");
+          idx++;
+          processNext();
+        }).catch(function (e) {
+          errors.push(f.name + ": " + (e.message || "failed"));
+          idx++;
+          processNext();
+        });
+      }
+
+      processNext();
     });
 
     card.appendChild(el("div", { class: "upload-row" }, [fileIn, btn]));

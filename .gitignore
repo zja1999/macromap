@@ -12,3 +12,6 @@
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local CSV data files
+csv/
