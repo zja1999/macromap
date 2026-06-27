@@ -1730,6 +1730,7 @@ window.MM.app = (function () {
     root.appendChild(uploadsCard);
     root.appendChild(reqCard);
     root.appendChild(fbCard);
+    root.appendChild(macroCheckerCard());
 
     refreshUploadLog();
 
@@ -1757,6 +1758,101 @@ window.MM.app = (function () {
       ? "Table not found — run supabase/admin-schema.sql to grant admin access."
       : "Couldn't load: " + (e.message || "error");
     host.appendChild(emptyHint(msg));
+  }
+
+  /* ---- admin: macro sanity checker ---- */
+  function macroCheckerCard() {
+    var m = window.MM.macros;
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { class: "section-label" }, "Macro calculator checker"));
+    card.appendChild(el("p", { class: "muted small" },
+      "Enter any profile to see macro targets across all focus × goal combinations. Use this to sanity-check the calculation logic."));
+
+    // inputs
+    var ageIn    = el("input",  { type: "number", class: "input", value: "30", min: "15", max: "80", style: "width:70px" });
+    var weightIn = el("input",  { type: "number", class: "input", value: "170", min: "80", max: "600", style: "width:80px" });
+    var sexSel   = el("select", { class: "input", style: "width:100px" }, [
+      el("option", { value: "male" },   "Male"),
+      el("option", { value: "female" }, "Female")
+    ]);
+    var actSel   = el("select", { class: "input", style: "width:190px" });
+    Object.keys(m.ACTIVITY).forEach(function (k) {
+      actSel.appendChild(el("option", { value: k }, m.ACTIVITY[k].label));
+    });
+    actSel.value = "moderate";
+
+    var tableWrap = el("div", { style: "overflow-x:auto;margin-top:12px" });
+
+    function rebuild() {
+      var age    = parseInt(ageIn.value, 10)    || 30;
+      var wLb    = parseFloat(weightIn.value)   || 170;
+      var sex    = sexSel.value;
+      var act    = actSel.value;
+      var wkg    = m.lbToKg(wLb);
+      var hcm    = sex === "female" ? 163 : 178; // neutral height
+
+      var GOALS  = ["lose", "maintain", "gain"];
+      var FOCUSES = Object.keys(m.FOCUS);
+
+      // header row: one column per goal
+      var thCells = [el("th", null, "Focus")];
+      GOALS.forEach(function (g) {
+        thCells.push(el("th", { colspan: "4", style: "text-align:center;border-left:2px solid var(--border)" },
+          m.GOALS[g].label));
+      });
+
+      // subheader
+      var subCells = [el("th", null, "")];
+      GOALS.forEach(function () {
+        ["kcal","prot","carb","fat"].forEach(function (lbl) {
+          subCells.push(el("th", { class: "muted small", style: "min-width:46px;text-align:right" + (lbl === "kcal" ? ";border-left:2px solid var(--border)" : "") }, lbl));
+        });
+      });
+
+      var rows = [el("tr", null, thCells), el("tr", null, subCells)];
+
+      FOCUSES.forEach(function (fk) {
+        var cells = [el("td", { style: "white-space:nowrap;font-weight:500" }, m.FOCUS[fk].label)];
+        GOALS.forEach(function (gk) {
+          var t = m.compute({ sex: sex, weightKg: wkg, heightCm: hcm, age: age,
+                              activity: act, goal: gk, rate: "0.5", focus: fk });
+          var pPct = Math.round(t.protein * 4 / t.kcal * 100);
+          var warn  = pPct > 40 || pPct < 15;
+          var style = "text-align:right" + (warn ? ";color:var(--warn)" : "");
+          var bstyle = "text-align:right;border-left:2px solid var(--border)";
+          cells.push(el("td", { style: bstyle }, String(t.kcal)));
+          cells.push(el("td", { style: style  }, t.protein + "g"));
+          cells.push(el("td", { style: "text-align:right" }, t.carbs + "g"));
+          cells.push(el("td", { style: "text-align:right" }, t.fat + "g"));
+        });
+        rows.push(el("tr", null, cells));
+      });
+
+      var gpkg = el("div", { class: "muted small", style: "margin-top:6px" },
+        "At " + wLb + " lb (" + wkg.toFixed(1) + " kg) — protein g/kg shown: " +
+        Object.keys(m.FOCUS).map(function (fk) {
+          var t = m.compute({ sex: sex, weightKg: wkg, heightCm: hcm, age: age,
+                              activity: act, goal: "maintain", rate: "0.5", focus: fk });
+          return fk + " " + (t.protein / wkg).toFixed(2);
+        }).join(" · "));
+
+      ui.clear(tableWrap);
+      tableWrap.appendChild(el("table", { style: "border-collapse:collapse;font-size:13px;width:100%" }, rows));
+      tableWrap.appendChild(gpkg);
+    }
+
+    var controls = el("div", { style: "display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px" }, [
+      el("label", { class: "muted small" }, "Age"),   ageIn,
+      el("label", { class: "muted small" }, "Weight (lb)"), weightIn,
+      el("label", { class: "muted small" }, "Sex"),   sexSel,
+      el("label", { class: "muted small" }, "Activity"), actSel,
+      el("button", { class: "btn small primary", onclick: rebuild }, "Recalculate")
+    ]);
+
+    card.appendChild(controls);
+    card.appendChild(tableWrap);
+    rebuild();
+    return card;
   }
 
   var STATUS_CLS = { open: "warn", added: "ok", declined: "muted" };
