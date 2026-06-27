@@ -30,13 +30,14 @@ window.MM.macros = (function () {
     "1.5":  { label: "1.5 lb / week (very aggressive)",kcal: 750 }
   };
 
-  // Fitness focus -> macro split as % of calories, plus a protein floor in g/kg.
+  // Fitness focus -> carb/fat ratio for non-protein calories, plus protein in g/kg body weight.
+  // c and f are only used as a ratio (c : f) to split remaining calories after protein is set.
   var FOCUS = {
-    fat_loss:   { label: "Fat loss / cutting",        p: 0.40, c: 0.30, f: 0.30, proteinPerKg: 2.0 },
-    muscle:     { label: "Build muscle",              p: 0.30, c: 0.45, f: 0.25, proteinPerKg: 1.8 },
-    recomp:     { label: "Body recomposition",        p: 0.35, c: 0.35, f: 0.30, proteinPerKg: 1.9 },
-    endurance:  { label: "Endurance / activity",      p: 0.25, c: 0.55, f: 0.20, proteinPerKg: 1.4 },
-    general:    { label: "General health",            p: 0.30, c: 0.40, f: 0.30, proteinPerKg: 1.4 }
+    fat_loss:   { label: "Fat loss / cutting",        c: 0.50, f: 0.50, proteinPerKg: 2.2 },
+    muscle:     { label: "Build muscle",              c: 0.65, f: 0.35, proteinPerKg: 1.8 },
+    recomp:     { label: "Body recomposition",        c: 0.55, f: 0.45, proteinPerKg: 2.0 },
+    endurance:  { label: "Endurance / activity",      c: 0.73, f: 0.27, proteinPerKg: 1.4 },
+    general:    { label: "General health",            c: 0.60, f: 0.40, proteinPerKg: 1.4 }
   };
 
   function lbToKg(lb) { return lb * 0.453592; }
@@ -66,10 +67,14 @@ window.MM.macros = (function () {
 
     var focus = FOCUS[profile.focus] || FOCUS.general;
 
-    // Protein: max of split-derived and body-weight floor.
-    var proteinFromSplit = (kcal * focus.p) / 4;
-    var proteinFromBody = focus.proteinPerKg * profile.weightKg;
-    var protein = Math.round(Math.max(proteinFromSplit, proteinFromBody));
+    // Protein is anchored to body weight (g/kg), not to a % of calories.
+    // Percentage-based protein grows with TDEE and produces 3+ g/kg targets for
+    // normal-weight users at maintenance — far above any evidence-based recommendation.
+    // Floor: 20% of calories so protein stays meaningful on very-low-calorie floors.
+    // Cap: 35% of calories so heavier users don't get absurd absolute targets.
+    var protein = Math.round(
+      Math.min(Math.max(focus.proteinPerKg * profile.weightKg, kcal * 0.20 / 4), kcal * 0.35 / 4)
+    );
 
     var proteinKcal = protein * 4;
     var remaining = Math.max(kcal - proteinKcal, 0);

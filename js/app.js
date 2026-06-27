@@ -487,7 +487,9 @@ window.MM.app = (function () {
           { v: "1600", label: "1 mi" },
           { v: "2400", label: "1.5 mi" },
           { v: "4000", label: "2.5 mi" },
-          { v: "8000", label: "5 mi" }
+          { v: "8000", label: "5 mi" },
+          { v: "16093", label: "10 mi" },
+          { v: "40234", label: "25 mi" }
         ], "2400")
       ])
     ]);
@@ -2231,4 +2233,4 @@ window.MM.app = (function () {
   };
 })();
 
-document.addEventListener("DOMContentLoaded", function () { window.MM.app.start(); });
+do
