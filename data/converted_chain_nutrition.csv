@@ -1,0 +1,94 @@
+chain_id,chain_name,chain_color,match,name,category,kcal,protein,carbs,fat,sodium,fiber,sugar
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Double-Double w/ Onion,Burgers,610,34,42,34,1670,2,9
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Double-Double w/ Mustard & Ketchup,Burgers,550,34,41,27,1600,2,10
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Protein Style Double-Double,Burgers,460,30,12,32,1390,2,7
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Cheeseburger w/ Onion,Burgers,430,20,40,21,1080,2,9
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Cheeseburger w/ Mustard & Ketchup,Burgers,380,20,39,15,1020,2,9
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Protein Style Cheeseburger,Burgers,280,16,11,19,800,2,7
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Hamburger w/ Onion,Burgers,360,16,38,16,670,2,8
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Hamburger w/ Mustard & Ketchup,Burgers,300,16,38,10,610,2,9
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,Protein Style Hamburger,Burgers,210,12,9,14,390,2,6
+innout,In-N-Out Burger,#E21833,in-n-out|in n out|in-n-out burger,French Fries,Sides,370,7,54,18,245,2,0
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Spicy Chicken Biscuit,Breakfast,450,19,44,22,1570,3,5
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Chick-fil-A Chick-n-Minis (4 ct),Breakfast,360,20,41,13,1060,2,8
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Egg White Grill,Breakfast,300,27,29,8,990,1,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Burrito,Breakfast,700,34,51,40,1770,3,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Burrito w/ Sausage,Breakfast,720,28,46,47,1450,3,1
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Burrito w/ Grilled Filet,Breakfast,650,36,46,36,1650,3,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Burrito w/ Spicy Chicken,Breakfast,740,37,53,42,2020,4,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Burrito w/ Bacon,Breakfast,680,30,46,42,1630,3,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Burrito w/ No Meat,Breakfast,580,22,47,34,1200,5,1
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Bowl,Breakfast,470,29,19,30,1350,2,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Bowl w/ Sausage,Breakfast,480,23,15,37,1020,2,1
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Bowl w/ Grilled Filet,Breakfast,420,31,15,26,1230,2,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Bowl w/ Spicy Chicken,Breakfast,500,32,21,32,1590,3,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Bowl w/ Bacon,Breakfast,450,23,15,32,1060,2,2
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Hash Brown Scramble Bowl w/ No Meat,Breakfast,350,17,16,24,770,3,1
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Chicken Egg & Cheese Biscuit,Breakfast,550,27,48,28,1870,3,7
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Bacon Egg & Cheese Biscuit,Breakfast,420,15,38,23,1220,2,4
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Sausage Egg & Cheese Biscuit,Breakfast,620,22,38,42,1510,2,4
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Chicken Egg & Cheese Muffin,Breakfast,410,27,36,18,1320,1,4
+chickfila,Chick-fil-A,#E51636,chick-fil-a|chick fil a|chickfila,Bacon Egg & Cheese Muffin,Breakfast,300,16,28,13,780,1,2
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Dave's Single,Burgers,524,28,37,29,865,1.7,8.2
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Dave's Double,Burgers,879,54,39,56,1731,1.7,9.7
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Dave's Triple,Burgers,1195,77,41,80,2400,1.7,10
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Baconator,Burgers,1001,63,38,66,2282,1.7,8.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Curry Bean Burger,Burgers,535,17,57,25,1102,7,9
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Spicy Chicken,Chicken,400,20,45,15,865,2.4,6.3
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Classic Chicken,Chicken,404,20,46,15,984,2.5,6.4
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Grilled Chicken,Chicken,337,26,35,10,629,1.7,6.4
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Avocado Chicken Club,Chicken,583,30,47,30,1338,2.4,6.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,4 Pc Chicken Nuggets,Chicken,114,11,4.9,5.6,366,0,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,6 Pc Chicken Nuggets,Chicken,173,17,7.4,8.4,551,0,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,10 Pc Chicken Nuggets,Chicken,286,28,12,14,905,0,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,20 Pc Chicken Nuggets,Chicken,572,55,25,28,1810,0,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,4 Pc Spicy Chicken Nuggets,Chicken,99,12,6.5,2.8,146,0,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,6 Pc Spicy Chicken Nuggets,Chicken,152,19,9.8,4.1,216,0,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,10 Pc Spicy Chicken Nuggets,Chicken,250,31,16,6.8,362,0.6,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,20 Pc Spicy Chicken Nuggets,Chicken,499,62,33,13,708,1.2,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Spicy Chicken Mayo Wrap,Wraps,341,12,27,20,511,2.3,1.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Spicy Chicken Avocado Wrap,Wraps,252,10,27,11,433,2.3,2.1
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Crispy Chicken Curry Mayo Wrap,Wraps,301,10,28,16,472,2.5,2.6
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Spicy Chicken BBQ Wrap,Wraps,268,12,32,9.7,551,2.3,5.8
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Cheeseburger Deluxe,Burgers,366,17,31,19,747,1.4,7.3
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Bacon Cheeseburger,Burgers,410,20,30,23,905,1.4,5.9
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Caesar Chicken Salad,Salads,411,28,4.2,31,826,1.4,3.7
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Avocado Chicken Salad,Salads,485,32,7.5,36,865,1.4,5.2
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Value Fries,Sides,142,1.6,18,6.7,826,1.5,3.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Medium Fries,Sides,176,2,22,8.5,826,1.9,3.7
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Large Fries,Sides,239,2.7,31,11,944,2.6,6.8
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Baconator Fries,Sides,459,12,25,34,669,2.3,2.6
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Cheesy Topped Fries,Sides,351,7.5,25,24,1023,2.3,2.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Plain Potato,Sides,232,4.4,39,5.4,747,4.7,2.4
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Bacon & Cheese Potato,Sides,405,14,40,20,629,4.3,3.8
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Sour Cream and Chives Potato,Sides,233,4.9,39,5.4,16,4.4,3.4
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Chili,Sides,253,19,14,13,590,1.9,3.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Chili Cheese Fries,Sides,481,17,32,31,669,3.2,4.2
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Chili Cheese Baked Potato,Sides,428,19,47,17,629,5.3,5.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Kid's Cheeseburger,Kids,317,17,30,14,708,1.4,6.3
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Kid's Hamburger,Kids,278,15,29,11,511,1.4,5.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Jr. Vanilla Frosty,Desserts,179,3.5,27,6.3,134,0,19
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Regular Vanilla Frosty,Desserts,311,6.1,47,11,236,0,34
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Large Vanilla Frosty,Desserts,424,8.2,64,15,315,0,45
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Jr. Chocolate Frosty,Desserts,174,5.2,28,4.6,79,0,23
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Regular Chocolate Frosty,Desserts,299,8.9,48,7.9,138,0,40
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Large Chocolate Frosty,Desserts,407,12,65,11,189,0,55
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Sausage Egg & Cheese Croissant,Breakfast,492,20,28,33,433,1.5,4.9
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Bacon Egg & Cheese Croissant,Breakfast,403,17,27,25,551,1,4.3
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Breakfast Baconator,Breakfast,704,37,39,44,1534,2.1,8
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Egg & Cheese Muffin,Breakfast,319,14,27,16,393,5.5,2.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Sausage & Cheese Muffin,Breakfast,477,23,28,29,551,6,3.2
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Bacon & Cheese Muffin,Breakfast,384,19,27,21,669,5.5,2.6
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Small Breakfast Potatoes,Breakfast,132,2.3,22,3.4,181,2.3,0
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Medium Breakfast Potatoes,Breakfast,186,3.2,31,4.8,260,3.2,0.5
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Large Breakfast Potatoes,Breakfast,236,4.1,39,6.1,327,4.1,0.7
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Pain au Chocolat,Breakfast,206,4.1,24,10,126,1.6,7.3
+wendys_uk,Wendy's UK,#E2203D,wendy's|wendys,Apple Slices,Sides,42,0,9.3,0,0,2.2,9.3
+raisingcanes,Raising Cane's,#D71920,raising cane's|raising canes|canes|cane's,Chicken Finger,Chicken,130,13,5,6,190,0,0
+raisingcanes,Raising Cane's,#D71920,raising cane's|raising canes|canes|cane's,Crinkle-Cut Fries,Sides,390,5,49,19,310,7,0
+raisingcanes,Raising Cane's,#D71920,raising cane's|raising canes|canes|cane's,Texas Toast,Sides,140,4,23,4,260,1,4
+raisingcanes,Raising Cane's,#D71920,raising cane's|raising canes|canes|cane's,Coleslaw,Sides,100,1,11,6,310,2,7
+raisingcanes,Raising Cane's,#D71920,raising cane's|raising canes|canes|cane's,Cane's Sauce,Sauces,190,0,6,19,580,0,4
+raisingcanes,Raising Cane's,#D71920,raising cane's|raising canes|canes|cane's,Box Combo,Combos,1290,61,100,73,2120,10,11
+raisingcanes,Raising Cane's,#D71920,raising cane's|raising canes|canes|cane's,3 Finger Combo,Combos,1020,47,84,56,1640,9,9
+raisingcanes,Raising Cane's,#D71920,raising cane's|raising canes|canes|cane's,Caniac Combo,Combos,1790,89,129,104,3110,13,16
