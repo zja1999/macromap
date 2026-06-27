@@ -164,6 +164,9 @@ body {
 .muted { color: var(--muted); }
 .small { font-size: 12.5px; }
 .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; }
+.collapsible-head { cursor: pointer; user-select: none; }
+.collapsible-chevron { display: inline-block; font-size: 9px; margin-right: 5px; }
+.collapsible-body.collapsed { display: none; }
 .spacer { flex: 1; }
 
 /* ----------------------------------------------------------- forms */

@@ -1726,19 +1726,30 @@ window.MM.app = (function () {
       return;
     }
 
-    var reqCard = el("div", { class: "card" }, [
-      el("div", { class: "section-label" }, "Chain requests"),
-      el("div", { id: "admin-requests" }, [emptyHint("Loading…")])
-    ]);
-    var fbCard = el("div", { class: "card" }, [
-      el("div", { class: "section-label" }, "Feedback"),
-      el("div", { id: "admin-feedback" }, [emptyHint("Loading…")])
-    ]);
+    function makeSection(label, id, startCollapsed, badge) {
+      var collapsed = startCollapsed;
+      var chevron = el("span", { class: "collapsible-chevron" }, collapsed ? "▶" : "▼");
+      var labelParts = [chevron, label];
+      if (badge) { labelParts.push(badge); }
+      var head = el("div", { class: "section-label collapsible-head" }, labelParts);
+      var body = el("div", { id: id, class: "collapsible-body" + (collapsed ? " collapsed" : "") }, [emptyHint("Loading…")]);
+      head.addEventListener("click", function () {
+        collapsed = !collapsed;
+        chevron.textContent = collapsed ? "▶" : "▼";
+        body.classList.toggle("collapsed", collapsed);
+      });
+      var card = el("div", { class: "card" });
+      card.appendChild(head);
+      card.appendChild(body);
+      return card;
+    }
+
+    var reqBadge = el("span", { class: "badge warn", style: "display:none;margin-left:8px;vertical-align:middle" });
+    var uploadsCard = makeSection("Upload history", "admin-uploads", true);
+    var reqCard = makeSection("Chain requests", "admin-requests", true, reqBadge);
+    var fbCard = makeSection("Feedback", "admin-feedback", false);
+
     root.appendChild(uploadCard());
-    var uploadsCard = el("div", { class: "card" }, [
-      el("div", { class: "section-label" }, "Upload history"),
-      el("div", { id: "admin-uploads" }, [emptyHint("Loading…")])
-    ]);
     root.appendChild(uploadsCard);
     root.appendChild(reqCard);
     root.appendChild(fbCard);
@@ -1753,6 +1764,8 @@ window.MM.app = (function () {
       // open ones first
       rows.sort(function (a, b) { return (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1); });
       rows.forEach(function (r) { host.appendChild(adminRequestRow(r)); });
+      var openCount = rows.filter(function (r) { return r.status === "open"; }).length;
+      if (openCount > 0) { reqBadge.textContent = openCount + " open"; reqBadge.style.display = ""; }
     }).catch(function (e) { adminError("admin-requests", e); });
 
     window.MM.data.fetchFeedback().then(function (rows) {
@@ -1776,8 +1789,17 @@ window.MM.app = (function () {
   function macroCheckerCard() {
     var m = window.MM.macros;
     var card = el("div", { class: "card" });
-    card.appendChild(el("div", { class: "section-label" }, "Macro calculator checker"));
-    card.appendChild(el("p", { class: "muted small" },
+    var collapsed = false;
+    var chevron = el("span", { class: "collapsible-chevron" }, "▼");
+    var head = el("div", { class: "section-label collapsible-head" }, [chevron, "Macro calculator checker"]);
+    head.addEventListener("click", function () {
+      collapsed = !collapsed;
+      chevron.textContent = collapsed ? "▶" : "▼";
+      body.classList.toggle("collapsed", collapsed);
+    });
+    card.appendChild(head);
+    var body = el("div", { class: "collapsible-body" });
+    body.appendChild(el("p", { class: "muted small" },
       "Enter any profile to see macro targets across all focus × goal combinations. Use this to sanity-check the calculation logic."));
 
     // inputs
@@ -1861,8 +1883,9 @@ window.MM.app = (function () {
       el("button", { class: "btn small primary", onclick: rebuild }, "Recalculate")
     ]);
 
-    card.appendChild(controls);
-    card.appendChild(tableWrap);
+    body.appendChild(controls);
+    body.appendChild(tableWrap);
+    card.appendChild(body);
     rebuild();
     return card;
   }
@@ -1894,13 +1917,16 @@ window.MM.app = (function () {
   /* ---- admin: bulk nutrition upload ---- */
   function uploadCard() {
     var card = el("div", { class: "card" });
-    card.appendChild(el("div", { class: "list-head" }, [
-      el("strong", null, "Upload nutrition data"),
+    var collapsed = false;
+    var chevron = el("span", { class: "collapsible-chevron" }, "▼");
+    var head = el("div", { class: "list-head collapsible-head" }, [
+      el("strong", null, [chevron, "Upload nutrition data"]),
       el("a", { class: "btn small ghost", href: "data/menu_template.csv", download: "macromap_menu_template.csv" }, "⬇ Template")
-    ]));
-    card.appendChild(el("p", { class: "muted small" },
+    ]);
+    var body = el("div", { class: "collapsible-body" });
+    body.appendChild(el("p", { class: "muted small" },
       "Upload a CSV or Excel file matching the template. The file is validated first — if any item is duplicated in the file or already exists in the database, nothing is added and you'll see what to fix."));
-    card.appendChild(el("p", { class: "muted small", html:
+    body.appendChild(el("p", { class: "muted small", html:
       "<b>Required columns:</b> chain_id, chain_name, name, kcal, protein, carbs, fat, sodium, fiber, sugar. " +
       "<b>Optional:</b> chain_color, match, category (safe to leave blank)." }));
 
@@ -1949,8 +1975,18 @@ window.MM.app = (function () {
       processNext();
     });
 
-    card.appendChild(el("div", { class: "upload-row" }, [fileIn, btn]));
-    card.appendChild(status);
+    body.appendChild(el("div", { class: "upload-row" }, [fileIn, btn]));
+    body.appendChild(status);
+
+    head.addEventListener("click", function (e) {
+      if (e.target.tagName === "A" || (e.target.closest && e.target.closest("a"))) return;
+      collapsed = !collapsed;
+      chevron.textContent = collapsed ? "▶" : "▼";
+      body.classList.toggle("collapsed", collapsed);
+    });
+
+    card.appendChild(head);
+    card.appendChild(body);
     return card;
   }
 
