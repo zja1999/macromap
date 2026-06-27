@@ -99,15 +99,28 @@ window.MM.map = (function () {
       "way[\"amenity\"~\"fast_food|restaurant|cafe\"](around:" + r + "," + lat + "," + lng + ");" +
       ");out center tags 80;";
 
-    return fetch(OVERPASS, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "data=" + encodeURIComponent(q)
-    })
-      .then(function (resp) {
+    function doFetch() {
+      return fetch(OVERPASS, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "data=" + encodeURIComponent(q)
+      }).then(function (resp) {
+        if (resp.status === 429) return null; // signal retry
         if (!resp.ok) throw new Error("Overpass request failed (" + resp.status + ").");
         return resp.json();
-      })
+      });
+    }
+
+    return doFetch().then(function (data) {
+      if (data !== null) return data;
+      // 429: wait 3 s and try once more before giving up
+      return new Promise(function (resolve) { setTimeout(resolve, 3000); })
+        .then(doFetch)
+        .then(function (data2) {
+          if (data2 === null) throw new Error("The map service is busy — wait a moment and try again.");
+          return data2;
+        });
+    })
       .then(function (data) {
         var seen = {};
         var places = (data.elements || []).map(function (el) {

@@ -569,7 +569,16 @@ window.MM.app = (function () {
     window.MM.map.invalidate();
   }
 
+  var searchInFlight = false;
+
   function runSearch(lat, lng, label) {
+    if (searchInFlight) return; // drop concurrent requests — prevents double-firing 429s
+    searchInFlight = true;
+
+    // Disable the locate button for the duration of the search
+    var locateBtn = document.getElementById("btn-locate");
+    if (locateBtn) { locateBtn.disabled = true; locateBtn.textContent = "Searching…"; }
+
     var radius = parseInt(document.querySelector('#view-discover [name="radius"]').value, 10) || 2400;
     var listEl = document.getElementById("place-list");
     ui.clear(listEl);
@@ -585,6 +594,9 @@ window.MM.app = (function () {
     }).catch(function (e) {
       ui.clear(listEl);
       listEl.appendChild(emptyHint("Couldn't load nearby places: " + e.message));
+    }).then(function () {
+      searchInFlight = false;
+      if (locateBtn) { locateBtn.disabled = false; locateBtn.textContent = "📍 Use my location"; }
     });
   }
 
