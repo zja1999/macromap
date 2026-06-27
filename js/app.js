@@ -2233,4 +2233,4 @@ window.MM.app = (function () {
   };
 })();
 
-do
+document.addEventListener("DOMContentLoaded", function () { window.MM.app.start(); });
