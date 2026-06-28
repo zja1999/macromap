@@ -226,6 +226,7 @@ window.MM.data = (function () {
    * Writes run as the signed-in admin (authHeaders), gated by is_admin() RLS. */
   var REQUIRED_COLS = ["chain_id", "chain_name", "name", "kcal", "protein", "carbs", "fat", "sodium", "fiber", "sugar"];
   var NUMERIC_COLS = ["kcal", "protein", "carbs", "fat", "sodium", "fiber", "sugar"];
+  var OPTIONAL_INT_COLS = ["default_qty", "max_qty"];
 
   function uploadSlug(t) {
     var s = String(t == null ? "" : t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -308,7 +309,13 @@ window.MM.data = (function () {
         };
       }
 
-      items.push(Object.assign({ id: id, chain_id: cid, name: name, category: String(row.category == null ? "" : row.category).trim() || null }, nums));
+      var optInts = {};
+      OPTIONAL_INT_COLS.forEach(function (col) {
+        var raw = String(row[col] == null ? "" : row[col]).trim();
+        if (raw !== "") { var v = parseInt(raw, 10); if (!isNaN(v)) optInts[col] = v; }
+      });
+      var servingLabel = String(row.serving_label == null ? "" : row.serving_label).trim() || null;
+      items.push(Object.assign({ id: id, chain_id: cid, name: name, category: String(row.category == null ? "" : row.category).trim() || null, serving_label: servingLabel }, nums, optInts));
     });
     return { errors: errors, chains: chains, items: items, dupesInFile: dupes };
   }
