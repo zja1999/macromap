@@ -21,7 +21,11 @@ window.MM.data = (function () {
   function assemble(chains, items) {
     var byId = {};
     chains.forEach(function (c) {
-      byId[c.id] = { id: c.id, name: c.name, color: c.color, match: c.match || [], items: [] };
+      byId[c.id] = {
+        id: c.id, name: c.name, color: c.color, match: c.match || [], items: [],
+        interaction_type: c.interaction_type || null,
+        plate_sizes: c.plate_sizes || null
+      };
     });
     items.forEach(function (it) {
       var c = byId[it.chain_id];
@@ -29,7 +33,10 @@ window.MM.data = (function () {
       c.items.push({
         name: it.name, category: it.category,
         kcal: +it.kcal, protein: +it.protein, carbs: +it.carbs, fat: +it.fat,
-        sodium: +it.sodium, fiber: +it.fiber, sugar: +it.sugar
+        sodium: +it.sodium, fiber: +it.fiber, sugar: +it.sugar,
+        serving_label: it.serving_label || null,
+        default_qty:   it.default_qty   ? +it.default_qty : null,
+        max_qty:       it.max_qty       ? +it.max_qty      : null
       });
     });
     return Object.keys(byId).map(function (k) { return byId[k]; })

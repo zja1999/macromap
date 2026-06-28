@@ -805,7 +805,29 @@ window.MM.app = (function () {
       });
 
       if (!items.length) { listWrap.appendChild(emptyHint("No items match.")); window.scrollTo(0, savedY); return; }
-      items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw)); });
+
+      var chainCfg = window.MM.getChainConfig(chain);
+
+      // Plate builder entry card — shown above items for plate_builder chains
+      if (chainCfg.interaction_type === "plate_builder") {
+        var entreeRoles = (chainCfg.category_roles && chainCfg.category_roles.entree) || [];
+        var sideRoles   = (chainCfg.category_roles && chainCfg.category_roles.side)   || [];
+        var hasEntrees  = chain.items.some(function (it) { return entreeRoles.indexOf(it.category) !== -1; });
+        var hasSides    = chain.items.some(function (it) { return sideRoles.indexOf(it.category) !== -1; });
+        if (hasEntrees && hasSides) {
+          listWrap.appendChild(el("div", { class: "card pb-entry-card" }, [
+            el("div", { class: "pb-entry-text" }, [
+              el("strong", null, "Build a Plate"),
+              el("div", { class: "muted small" }, "Pick a size, choose your entrees and side. Live macros update as you build.")
+            ]),
+            el("button", { class: "btn primary", onclick: function () {
+              window.MM.plateBuilder.openPlateBuilder(chain, addToLog);
+            } }, "Open Plate Builder →")
+          ]));
+        }
+      }
+
+      items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw, chain, chainCfg)); });
       window.scrollTo(0, savedY);
     }
 
@@ -826,7 +848,7 @@ window.MM.app = (function () {
     return flags;
   }
 
-  function itemCard(it, rem, redraw) {
+  function itemCard(it, rem, redraw, chain, chainCfg) {
     var fits = rem ? it.kcal <= rem.kcal : null;
     var checked = state.compare.some(function (c) { return c.chainId === it.chainId && c.name === it.name; });
 
@@ -841,6 +863,17 @@ window.MM.app = (function () {
       ])
     ]);
 
+    // Items with serving_label get a qty stepper; all others get plain Add
+    var actionBtn;
+    if (it.serving_label && chain) {
+      var slLabel = it.serving_label;
+      actionBtn = el("button", { class: "btn small primary qs-open-btn", onclick: function () {
+        window.MM.plateBuilder.openQtySlider(it, chain, addToLog);
+      } }, "Add " + slLabel + "s…");
+    } else {
+      actionBtn = el("button", { class: "btn small primary", onclick: function () { addToLog(it, 1); } }, "Add");
+    }
+
     var foot = el("div", { class: "item-foot" }, [
       el("label", { class: "check tiny" }, [
         el("input", { type: "checkbox", checked: checked ? "checked" : null, onchange: function (e) { toggleCompare(it, e.target.checked); } }),
@@ -851,7 +884,7 @@ window.MM.app = (function () {
           class: "muted small" + (fits ? "" : " over-note"),
           title: "Compared to the calories you have left today (" + ui.fmt(rem.kcal) + " cal)"
         }, fits ? ui.fmt(rem.kcal - it.kcal) + " cal left after" : "over by " + ui.fmt(it.kcal - rem.kcal) + " cal") : null,
-        el("button", { class: "btn small primary", onclick: function () { addToLog(it, 1); } }, "Add")
+        actionBtn
       ])
     ]);
 
