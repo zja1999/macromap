@@ -46,15 +46,23 @@ window.MM.data = (function () {
       ));
     }
     var base = cfg().supabaseUrl + "/rest/v1/";
+    var hdrs = headers();
+    function fetchAllItems(offset, acc) {
+      var PAGE = 1000;
+      return fetch(base + "menu_items?select=*&order=chain_id&limit=" + PAGE + "&offset=" + offset, { headers: hdrs }).then(function (r) {
+        if (!r.ok) throw new Error("Menu items request failed (" + r.status + ").");
+        return r.json();
+      }).then(function (page) {
+        var combined = acc.concat(page);
+        return page.length === PAGE ? fetchAllItems(offset + PAGE, combined) : combined;
+      });
+    }
     return Promise.all([
-      fetch(base + "chains?select=*", { headers: headers() }).then(function (r) {
+      fetch(base + "chains?select=*", { headers: hdrs }).then(function (r) {
         if (!r.ok) throw new Error("Chains table request failed (" + r.status + ").");
         return r.json();
       }),
-      fetch(base + "menu_items?select=*&order=chain_id", { headers: headers() }).then(function (r) {
-        if (!r.ok) throw new Error("Menu items request failed (" + r.status + ").");
-        return r.json();
-      })
+      fetchAllItems(0, [])
     ]).then(function (res) {
       var chains = res[0], items = res[1];
       if (!Array.isArray(chains) || !Array.isArray(items) || !chains.length) {
