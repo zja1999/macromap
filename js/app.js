@@ -810,19 +810,24 @@ window.MM.app = (function () {
 
       // Plate builder entry card — shown above items for plate_builder chains
       if (chainCfg.interaction_type === "plate_builder") {
-        var entreeRoles = (chainCfg.category_roles && chainCfg.category_roles.entree) || [];
-        var sideRoles   = (chainCfg.category_roles && chainCfg.category_roles.side)   || [];
-        var hasEntrees  = chain.items.some(function (it) { return entreeRoles.indexOf(it.category) !== -1; });
-        var hasSides    = chain.items.some(function (it) { return sideRoles.indexOf(it.category) !== -1; });
-        if (hasEntrees && hasSides) {
+        var pbRoles = chainCfg.category_roles || {};
+        var pbRoleKeys = Object.keys(pbRoles);
+        // Show card if at least one configured role has items with matching categories
+        var hasAnyRoleItems = pbRoleKeys.length === 0
+          ? chain.items.length > 0
+          : pbRoleKeys.some(function (role) {
+              var cats = pbRoles[role] || [];
+              return chain.items.some(function (it) { return cats.indexOf(it.category) !== -1; });
+            });
+        if (hasAnyRoleItems) {
           listWrap.appendChild(el("div", { class: "card pb-entry-card" }, [
             el("div", { class: "pb-entry-text" }, [
-              el("strong", null, "Build a Plate"),
-              el("div", { class: "muted small" }, "Pick a size, choose your entrees and side. Live macros update as you build.")
+              el("strong", null, "Build your order"),
+              el("div", { class: "muted small" }, "Pick a size and fill your slots. Live macros update as you build.")
             ]),
             el("button", { class: "btn primary", onclick: function () {
               window.MM.plateBuilder.openPlateBuilder(chain, addToLog);
-            } }, "Open Plate Builder →")
+            } }, "Open Builder →")
           ]));
         }
       }
