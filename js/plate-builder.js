@@ -3,6 +3,14 @@
  * Exports:
  *   MM.plateBuilder.openPlateBuilder(chain, addToLogFn)
  *   MM.plateBuilder.openQtySlider(item, chain, addToLogFn)
+ *
+ * plate_sizes format (stored as JSONB in chains table):
+ *   [{id, label, slots: [{role, label, count, optional}]}]
+ *
+ *   role maps to plate_config.category_roles[role] — the DB categories
+ *   whose items fill that slot type. count > 1 creates multiple slots of
+ *   the same role (e.g. Panda "Plate" has 2 entree slots). optional=true
+ *   means the slot can be skipped and the Add button still enables.
  */
 window.MM = window.MM || {};
 
@@ -65,56 +73,89 @@ window.MM.plateBuilder = (function () {
 
   /* ------------------------------------------------------- plate builder */
 
+  /* Expand a size definition into a flat array of slot instances.
+   * Each instance: { role, label, key, optional }
+   * key is "role_index" e.g. "entree_0", "entree_1", "side_0" */
+  function expandSlots(size) {
+    var result = [];
+    var slotDefs = size.slots || [];
+    slotDefs.forEach(function (def) {
+      var count = def.count || 1;
+      for (var i = 0; i < count; i++) {
+        var displayLabel = count > 1
+          ? def.label + ' ' + (i + 1)
+          : def.label;
+        result.push({
+          role:     def.role,
+          label:    displayLabel,
+          key:      def.role + '_' + i,
+          optional: !!def.optional
+        });
+      }
+    });
+    return result;
+  }
+
+  /* Returns items that belong to a given role based on category_roles config */
+  function itemsForRole(role, chain, cfg) {
+    var cats = (cfg.category_roles && cfg.category_roles[role]) || [];
+    return chain.items.filter(function (it) {
+      return cats.indexOf(it.category) !== -1;
+    });
+  }
+
+  /* CSS class for slot dot in size picker — first role gets "entree" color */
+  function dotClass(role, firstRole) {
+    return role === firstRole ? 'pb-dot entree' : 'pb-dot side';
+  }
+
+  /* Human-readable slot summary for size picker card subtitle */
+  function slotSummary(size) {
+    var seen  = {};
+    var parts = [];
+    (size.slots || []).forEach(function (def) {
+      if (!seen[def.role]) {
+        seen[def.role] = true;
+        var n = def.count || 1;
+        parts.push(n + ' ' + def.label.toLowerCase() + (n > 1 ? 's' : '') + (def.optional ? ' (opt.)' : ''));
+      }
+    });
+    return parts.join(' + ');
+  }
+
   function openPlateBuilder(chain, addToLogFn) {
     init();
     var cfg   = window.MM.getChainConfig(chain);
     var sizes = cfg.plate_sizes || [];
-    var roles = cfg.category_roles || { entree: [], side: [] };
 
-    // Partition items by slot role
-    var entreeItems = chain.items.filter(function (it) {
-      return roles.entree.indexOf(it.category) !== -1;
-    });
-    var sideItems = chain.items.filter(function (it) {
-      return roles.side.indexOf(it.category) !== -1;
-    });
-
-    // Mutable selection state
+    // Mutable state
     var sizeChoice = null;
-    var entrees    = [];   // sparse — length == sizeChoice.entrees
-    var sideChoice = null;
+    var selections = {}; // { [slotKey]: item }
 
     function liveTotal() {
       var t = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
-      entrees.forEach(function (it) {
+      Object.keys(selections).forEach(function (k) {
+        var it = selections[k];
         if (!it) return;
         t.kcal += it.kcal; t.protein += it.protein;
         t.carbs += it.carbs; t.fat += it.fat;
       });
-      if (sideChoice) {
-        t.kcal += sideChoice.kcal; t.protein += sideChoice.protein;
-        t.carbs += sideChoice.carbs; t.fat += sideChoice.fat;
-      }
       return t;
     }
 
     function allFilled() {
       if (!sizeChoice) return false;
-      for (var i = 0; i < sizeChoice.entrees; i++) { if (!entrees[i]) return false; }
-      return !!sideChoice;
+      return expandSlots(sizeChoice).every(function (slot) {
+        return slot.optional || !!selections[slot.key];
+      });
     }
 
-    // The modal body container — redrawn in place without reopening modal
     var bodyEl = ui.el('div', { class: 'pb-body' });
 
     function rebuild() {
       ui.clear(bodyEl);
       if (!sizeChoice) {
-        bodyEl.appendChild(renderSizePicker(sizes, function (s) {
-          sizeChoice = s;
-          entrees = new Array(s.entrees);
-          rebuild();
-        }));
+        bodyEl.appendChild(renderSizePicker());
       } else {
         bodyEl.appendChild(renderPlateOverview());
         bodyEl.appendChild(renderLiveMacros());
@@ -123,62 +164,64 @@ window.MM.plateBuilder = (function () {
     }
 
     /* Size picker */
-    function renderSizePicker(sizes, onPick) {
+    function renderSizePicker() {
       var wrap = ui.el('div', null, [
-        ui.el('div', { class: 'pb-step-label' }, 'Choose your plate size'),
+        ui.el('div', { class: 'pb-step-label' }, 'Choose your size'),
         ui.el('div', { class: 'pb-size-grid' })
       ]);
       var grid = wrap.querySelector('.pb-size-grid');
       sizes.forEach(function (s) {
+        var firstRole = s.slots && s.slots[0] ? s.slots[0].role : 'entree';
         var dots = [];
-        for (var i = 0; i < s.entrees; i++) dots.push(ui.el('span', { class: 'pb-dot entree' }, ''));
-        dots.push(ui.el('span', { class: 'pb-dot side' }, ''));
-        grid.appendChild(ui.el('button', { class: 'pb-size-btn', onclick: function () { onPick(s); } }, [
+        (s.slots || []).forEach(function (def) {
+          for (var i = 0; i < (def.count || 1); i++) {
+            dots.push(ui.el('span', { class: dotClass(def.role, firstRole) }, ''));
+          }
+        });
+        grid.appendChild(ui.el('button', {
+          class: 'pb-size-btn',
+          onclick: function () { sizeChoice = s; selections = {}; rebuild(); }
+        }, [
           ui.el('div', { class: 'pb-size-dots' }, dots),
           ui.el('div', { class: 'pb-size-label' }, s.label),
-          ui.el('div', { class: 'pb-size-sub' }, s.entrees + ' entree' + (s.entrees > 1 ? 's' : '') + ' + 1 side')
+          ui.el('div', { class: 'pb-size-sub' }, slotSummary(s))
         ]));
       });
       return wrap;
     }
 
-    /* Plate overview with filled/empty slot cards */
+    /* Plate overview */
     function renderPlateOverview() {
-      var slots = ui.el('div', { class: 'pb-slots' });
+      var wrap = ui.el('div', { class: 'pb-slots' });
 
-      // Header with back button
-      var header = ui.el('div', { class: 'pb-plate-header' }, [
-        ui.el('button', { class: 'btn small ghost pb-back-btn', onclick: function () {
-          sizeChoice = null; entrees = []; sideChoice = null; rebuild();
-        } }, '← Back'),
+      wrap.appendChild(ui.el('div', { class: 'pb-plate-header' }, [
+        ui.el('button', {
+          class: 'btn small ghost pb-back-btn',
+          onclick: function () { sizeChoice = null; selections = {}; rebuild(); }
+        }, '← Back'),
         ui.el('span', { class: 'pb-plate-name' }, sizeChoice.label)
-      ]);
-      slots.appendChild(header);
+      ]));
 
-      // Entree slots
-      for (var i = 0; i < sizeChoice.entrees; i++) {
-        slots.appendChild(renderSlot('Entree', entrees[i], (function (idx) {
-          return function () {
-            openItemPicker('Choose an Entree', entreeItems, function (it) {
-              entrees[idx] = it; rebuild();
-            });
-          };
-        })(i), function (idx) {
-          return function () { entrees[idx] = null; rebuild(); };
-        }(i)));
-      }
+      expandSlots(sizeChoice).forEach(function (slot) {
+        var slotItems = itemsForRole(slot.role, chain, cfg);
+        var item = selections[slot.key] || null;
+        var slotLabel = slot.label + (slot.optional ? ' (optional)' : '');
 
-      // Side slot
-      slots.appendChild(renderSlot('Side', sideChoice,
-        function () {
-          openItemPicker('Choose a Side', sideItems, function (it) {
-            sideChoice = it; rebuild();
-          });
-        },
-        function () { sideChoice = null; rebuild(); }
-      ));
+        wrap.appendChild(renderSlot(slotLabel, item,
+          function (k) {
+            return function () {
+              openItemPicker('Choose ' + slot.label, slotItems, function (it) {
+                selections[k] = it; rebuild();
+              });
+            };
+          }(slot.key),
+          function (k) {
+            return function () { selections[k] = null; rebuild(); };
+          }(slot.key)
+        ));
+      });
 
-      return slots;
+      return wrap;
     }
 
     function renderSlot(label, item, onPick, onClear) {
@@ -206,21 +249,19 @@ window.MM.plateBuilder = (function () {
       ]);
     }
 
-    /* Live macro total strip */
     function renderLiveMacros() {
       var total = liveTotal();
-      var filled = entrees.filter(Boolean).length + (sideChoice ? 1 : 0);
-      var needed = (sizeChoice ? sizeChoice.entrees : 0) + 1;
-      var wrap = ui.el('div', { class: 'pb-live' }, [
+      var slots = expandSlots(sizeChoice);
+      var filled = slots.filter(function (s) { return !!selections[s.key]; }).length;
+      var needed = slots.filter(function (s) { return !s.optional; }).length;
+      return ui.el('div', { class: 'pb-live' }, [
         ui.el('div', { class: 'pb-live-label' },
-          filled === needed ? 'Plate total' : 'Running total (' + filled + '/' + needed + ' items)'
+          filled >= needed ? 'Plate total' : 'Running total (' + filled + '/' + needed + ' items)'
         ),
         ui.macroPills(total)
       ]);
-      return wrap;
     }
 
-    /* Add to log button */
     function renderAddBtn() {
       var ready = allFilled();
       var total = liveTotal();
@@ -228,14 +269,16 @@ window.MM.plateBuilder = (function () {
         class: 'btn primary pb-add-btn' + (ready ? '' : ' pb-add-disabled'),
         disabled: ready ? null : 'disabled',
         onclick: function () {
-          entrees.forEach(function (it) { if (it) addToLogFn(it, 1); });
-          if (sideChoice) addToLogFn(sideChoice, 1);
+          expandSlots(sizeChoice).forEach(function (slot) {
+            var it = selections[slot.key];
+            if (it) addToLogFn(it, 1);
+          });
           closeFn();
-          ui.toast('Plate added — ' + ui.fmt(total.kcal) + ' cal total', 'ok');
+          ui.toast('Added — ' + ui.fmt(total.kcal) + ' cal total', 'ok');
         }
       }, ready
         ? 'Add ' + sizeChoice.label + ' to Log (' + ui.fmt(total.kcal) + ' cal)'
-        : 'Choose all items to add'
+        : 'Choose required items to add'
       );
     }
 
@@ -278,8 +321,7 @@ window.MM.plateBuilder = (function () {
       var closePickerFn = ui.modal(title, pickerBody, [{ label: 'Cancel', kind: 'ghost' }]);
     }
 
-    // Open the main modal — body is the mutable container
-    var closeFn = ui.modal(chain.name + ' — Build your plate', bodyEl, [
+    var closeFn = ui.modal(chain.name + ' — Build your order', bodyEl, [
       { label: 'Cancel', kind: 'ghost' }
     ]);
 
@@ -290,7 +332,6 @@ window.MM.plateBuilder = (function () {
 
   function plural(label, n) {
     if (n === 1) return label;
-    // simple pluralisation: "slice" → "slices", "wing" → "wings"
     return label + 's';
   }
 
