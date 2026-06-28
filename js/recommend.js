@@ -132,9 +132,77 @@ window.MM.recommend = (function () {
     }
   };
 
+  /* Suggest same-chain entree + side meal combos that fit the calorie budget.
+   * Only considers chains that have plate_config.category_roles defined,
+   * since those explicitly map which categories are entrees vs sides.
+   * Returns array of { chainName, entree, side, score } sorted by score desc. */
+  function suggestCombos(remaining, chainIdFilter, categoryFilter, limit) {
+    limit = limit || 5;
+    var chains = window.MM.NUTRITION || [];
+    var results = [];
+
+    chains.forEach(function (chain) {
+      if (chainIdFilter && chain.id !== chainIdFilter) return;
+
+      var cfg = window.MM.getChainConfig ? window.MM.getChainConfig(chain) : null;
+      var roles = cfg && cfg.category_roles;
+      if (!roles || !roles.entree || !roles.side) return; // no role mapping — skip
+
+      var entreeCats = roles.entree;
+      var sideCats = roles.side;
+
+      var entrees = chain.items.filter(function (it) {
+        if (entreeCats.indexOf(it.category) === -1) return false;
+        if (categoryFilter && it.category !== categoryFilter) return false;
+        return true;
+      }).map(function (it) {
+        return Object.assign({ chainId: chain.id, chainName: chain.name }, it);
+      });
+
+      var sides = chain.items.filter(function (it) {
+        if (sideCats.indexOf(it.category) === -1) return false;
+        // Don't filter sides by categoryFilter — that's for entrees
+        return true;
+      }).map(function (it) {
+        return Object.assign({ chainId: chain.id, chainName: chain.name }, it);
+      });
+
+      if (!entrees.length || !sides.length) return;
+
+      var maxCal = remaining ? remaining.kcal : Infinity;
+      var best = null, bestScore = -Infinity;
+
+      entrees.forEach(function (en) {
+        sides.forEach(function (si) {
+          if (en.kcal + si.kcal > maxCal) return;
+          var remAfterEntree = remaining ? {
+            kcal: remaining.kcal - en.kcal,
+            protein: remaining.protein - en.protein,
+            carbs: remaining.carbs - en.carbs,
+            fat: remaining.fat - en.fat
+          } : null;
+          var enScore = scoreItem(en, remaining, { prioritize: "protein" });
+          var siScore = scoreItem(si, remAfterEntree, { prioritize: "protein" });
+          if (!enScore || !siScore) return;
+          var combined = enScore.score + siScore.score;
+          if (combined > bestScore) {
+            bestScore = combined;
+            best = { chainName: chain.name, entree: en, side: si, score: combined };
+          }
+        });
+      });
+
+      if (best) results.push(best);
+    });
+
+    results.sort(function (a, b) { return b.score - a.score; });
+    return results.slice(0, limit);
+  }
+
   return {
     scoreItem: scoreItem,
     rank: rank,
+    suggestCombos: suggestCombos,
     PRESETS: PRESETS
   };
 })();

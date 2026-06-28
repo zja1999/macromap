@@ -13,12 +13,31 @@ window.MM.app = (function () {
 
   var state = {
     view: "profile",
-    selectedChainId: null,   // chain shown in Menu view
+    selectedChainId: null,   // chain shown in Menu view (set by Discover; synced into filters)
     nearbyPlaces: [],        // last Overpass results
     viewDate: window.MM.store.todayKey(),
     compare: [],             // items selected for comparison in Menu view
     profileEditing: false    // whether the profile form is expanded for editing
   };
+
+  // Persistent filter state for the Browse tab — survives tab switches and reloads.
+  function lsGet(key, def) {
+    var v = localStorage.getItem(key);
+    if (v === null) return def;
+    if (typeof def === "boolean") return v === "true";
+    return v;
+  }
+  var filters = {
+    recMode:    lsGet("mm_rec_mode",           true),
+    category:   lsGet("mm_filter_category",    ""),
+    chainId:    lsGet("mm_filter_chain",       ""),
+    search:     lsGet("mm_filter_search",      ""),
+    sort:       lsGet("mm_filter_sort",        "ppc"),
+    favorites:  lsGet("mm_filter_favorites",   false),
+    fit:        lsGet("mm_filter_fit",         false),
+    combosOpen: lsGet("mm_combos_open",        false)
+  };
+  function saveFilter(key, value) { localStorage.setItem(key, String(value)); }
 
   // Set to an error string if loadNutrition() fails; null while loading or after success.
   var nutritionError = null;
@@ -42,8 +61,7 @@ window.MM.app = (function () {
   var VIEWS = [
     { id: "profile",   label: "Profile",   icon: "👤" },
     { id: "discover",  label: "Discover",  icon: "📍" },
-    { id: "menu",      label: "Menus",     icon: "🍔" },
-    { id: "recommend", label: "For You",   icon: "✨" },
+    { id: "menu",      label: "Browse",    icon: "🍔" },
     { id: "tracker",   label: "Tracker",   icon: "📊" },
     { id: "requests",  label: "Add Data",  icon: "➕" }
   ];
@@ -166,6 +184,12 @@ window.MM.app = (function () {
   /* ----------------------------------------------------------- navigation */
 
   function navigate(view) {
+    // "recommend" was the old For You tab — redirect to Browse with rec mode on.
+    if (view === "recommend") {
+      filters.recMode = true;
+      saveFilter("mm_rec_mode", true);
+      view = "menu";
+    }
     state.view = view;
     document.querySelectorAll(".view").forEach(function (v) { v.classList.add("hidden"); });
     var target = document.getElementById("view-" + view);
@@ -173,11 +197,17 @@ window.MM.app = (function () {
     document.querySelectorAll(".nav-item").forEach(function (n) {
       n.classList.toggle("active", n.getAttribute("data-view") === view);
     });
+    // Sync Discover → Browse chain selection into persisted filter state.
+    if (view === "menu" && state.selectedChainId) {
+      filters.chainId = state.selectedChainId;
+      saveFilter("mm_filter_chain", filters.chainId);
+      state.selectedChainId = null;
+    }
     // per-view refresh on show
     if (view === "profile") renderProfile();
     if (view === "discover") { renderDiscover(); window.MM.map.invalidate(); }
     if (view === "menu") renderMenu();
-    if (view === "recommend") renderRecommend();
+    if (view === "onboarding") renderOnboarding();
     if (view === "tracker") renderTracker();
     if (view === "requests") renderRequests();
     if (view === "admin") renderAdmin();
@@ -217,34 +247,11 @@ window.MM.app = (function () {
    *  PROFILE VIEW
    * ===================================================================== */
 
-  function renderProfile() {
-    var root = document.getElementById("view-profile");
-    ui.clear(root);
+  // Build the profile form element. opts: { submitLabel, cancelLabel, onCancel, onSubmit }
+  function buildProfileForm(p, opts) {
     var m = window.MM.macros;
-    var saved = window.MM.store.getProfile();
-    var savedTargets = window.MM.store.getTargets();
-
-    // Once set up, collapse to a summary (things like height rarely change) and
-    // let the user expand to edit. New users see the full form.
-    if (saved && savedTargets && !state.profileEditing) {
-      root.appendChild(header("Your nutrition profile",
-        "Your targets are set. Edit anytime as your weight or goals change."));
-      root.appendChild(targetsCard(savedTargets, saved));
-      root.appendChild(profileSummaryCard(saved));
-      return;
-    }
-
-    var p = saved || {
-      age: 30, sex: "male", heightCm: 178, weightKg: m.lbToKg(175),
-      units: "imperial", activity: "moderate", goal: "lose", rate: "0.5", focus: "fat_loss"
-    };
-
-    root.appendChild(header("Your nutrition profile",
-      "Tell us about you and we'll estimate daily calories and macros. Saved automatically and reused next time."));
-
     var form = el("form", { class: "card form-grid", id: "profile-form" });
 
-    // units toggle
     var unitWrap = el("div", { class: "field span2" }, [
       el("label", null, "Units"),
       segmented("units", [
@@ -268,14 +275,13 @@ window.MM.app = (function () {
       if (units === "imperial") {
         var ft = Math.floor(m.cmToIn(p.heightCm) / 12);
         var inch = Math.round(m.cmToIn(p.heightCm) - ft * 12);
-        var hWrap = el("div", { class: "field" }, [
+        measures.appendChild(el("div", { class: "field" }, [
           el("label", null, "Height"),
           el("div", { class: "inline" }, [
             numInput("heightFt", ft, 3, 8), el("span", { class: "unit" }, "ft"),
             numInput("heightIn", inch, 0, 11), el("span", { class: "unit" }, "in")
           ])
-        ]);
-        measures.appendChild(hWrap);
+        ]));
         measures.appendChild(field("Weight",
           el("div", { class: "inline" }, [numInput("weightLb", Math.round(m.kgToLb(p.weightKg)), 50, 700), el("span", { class: "unit" }, "lb")])));
       } else {
@@ -301,7 +307,6 @@ window.MM.app = (function () {
       Object.keys(m.GOALS).map(function (k) { return { v: k, label: m.GOALS[k].label }; }), p.goal,
       onGoalChange)));
 
-    // Order rates numerically (object-key order would float "1" to the front).
     var rateOpts = Object.keys(m.RATES)
       .sort(function (a, b) { return parseFloat(a) - parseFloat(b); })
       .map(function (k) { return { v: k, label: m.RATES[k].label }; });
@@ -315,40 +320,68 @@ window.MM.app = (function () {
       var goal = form.querySelector('select[name="goal"]').value;
       rateField.style.display = goal === "maintain" ? "none" : "";
     }
-    // When the weight goal changes, reorder fitness goals by relevance and
-    // default to the most fitting one (e.g. "Build muscle" when gaining).
     function onGoalChange() {
       updateRateVisibility();
-      var opts = focusOptionsFor(form.querySelector('select[name="goal"]').value);
+      var goalopts = focusOptionsFor(form.querySelector('select[name="goal"]').value);
       ui.clear(focusSelect);
-      opts.forEach(function (o) { focusSelect.appendChild(el("option", { value: o.v }, o.label)); });
-      focusSelect.value = opts[0].v;
+      goalopts.forEach(function (o) { focusSelect.appendChild(el("option", { value: o.v }, o.label)); });
+      focusSelect.value = goalopts[0].v;
     }
     updateRateVisibility();
 
     var actions = el("div", { class: "span2 form-actions" }, [
-      el("button", { class: "btn primary", type: "submit" }, saved ? "Save changes" : "Calculate my targets")
+      el("button", { class: "btn primary", type: "submit" }, opts.submitLabel)
     ]);
-    if (saved) {
-      actions.appendChild(el("button", { class: "btn ghost", type: "button", onclick: function () {
-        state.profileEditing = false; renderProfile();
-      } }, "Cancel"));
+    if (opts.cancelLabel) {
+      actions.appendChild(el("button", { class: "btn ghost", type: "button",
+        onclick: opts.onCancel }, opts.cancelLabel));
     }
     form.appendChild(actions);
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
-      var prof = readProfileForm(form);
-      window.MM.store.setProfile(prof);
-      var t = m.compute(prof);
-      window.MM.store.setTargets(t);
-      state.profileEditing = false;
-      ui.toast("Targets saved to your profile", "ok");
-      renderProfile();
-      renderNavBadge();
+      opts.onSubmit(readProfileForm(form));
     });
 
-    root.appendChild(form);
+    return form;
+  }
+
+  function renderProfile() {
+    var root = document.getElementById("view-profile");
+    ui.clear(root);
+    var m = window.MM.macros;
+    var saved = window.MM.store.getProfile();
+    var savedTargets = window.MM.store.getTargets();
+
+    if (saved && savedTargets && !state.profileEditing) {
+      root.appendChild(header("Your nutrition profile",
+        "Your targets are set. Edit anytime as your weight or goals change."));
+      root.appendChild(targetsCard(savedTargets, saved));
+      root.appendChild(profileSummaryCard(saved));
+      return;
+    }
+
+    var p = saved || {
+      age: 30, sex: "male", heightCm: 178, weightKg: m.lbToKg(175),
+      units: "imperial", activity: "moderate", goal: "lose", rate: "0.5", focus: "fat_loss"
+    };
+
+    root.appendChild(header("Your nutrition profile",
+      "Tell us about you and we'll estimate daily calories and macros. Saved automatically and reused next time."));
+
+    root.appendChild(buildProfileForm(p, {
+      submitLabel: saved ? "Save changes" : "Calculate my targets",
+      cancelLabel: saved ? "Cancel" : null,
+      onCancel: function () { state.profileEditing = false; renderProfile(); },
+      onSubmit: function (prof) {
+        window.MM.store.setProfile(prof);
+        window.MM.store.setTargets(m.compute(prof));
+        state.profileEditing = false;
+        ui.toast("Targets saved to your profile", "ok");
+        renderProfile();
+        renderNavBadge();
+      }
+    }));
   }
 
   function readProfileForm(form) {
@@ -727,11 +760,11 @@ window.MM.app = (function () {
 
   function renderMenu() {
     var root = document.getElementById("view-menu");
+    var savedY = window.scrollY;
     ui.clear(root);
-    root.appendChild(header("Browse menus", "Compare items by macros. Add anything straight to your log.",
-      helpBtn("Reading the menu", menuHelp())));
 
     if (!window.MM.NUTRITION || !window.MM.NUTRITION.length) {
+      root.appendChild(header("Browse", "Find and compare restaurant menu items."));
       root.appendChild(noticeCard(
         nutritionError ? "Couldn't load restaurant data" : "Loading restaurant data…",
         nutritionError || "Fetching menus from the database — this only takes a moment.",
@@ -743,20 +776,149 @@ window.MM.app = (function () {
 
     var chains = window.MM.NUTRITION;
     var nearbyIds = availableChainIds();
-    if (!state.selectedChainId) {
-      state.selectedChainId = nearbyIds[0] || chains[0].id;
+    var tg = window.MM.store.getTargets();
+    var rem = remaining();
+
+    // In browse mode, always need a selected chain — seed to first available.
+    // In rec mode, empty chainId means "All chains", so don't seed.
+    if (!filters.recMode && !filters.chainId && chains.length) {
+      filters.chainId = nearbyIds[0] || chains[0].id;
+      saveFilter("mm_filter_chain", filters.chainId);
     }
 
+    root.appendChild(header("Browse",
+      filters.recMode
+        ? "Picks ranked by how well they fit your remaining macros today."
+        : "Compare items by macros. Add anything straight to your log.",
+      helpBtn(filters.recMode ? "How recommendations work" : "Reading the menu",
+              filters.recMode ? recommendHelp() : menuHelp())));
+
+    // 1. Remaining macros strip (always, when targets set)
+    if (tg) root.appendChild(remainingStrip(rem));
+
+    // 2. Recommendations toggle
+    root.appendChild(buildToggleRow());
+
+    // 3. Shared filters
+    root.appendChild(buildSharedFilters(chains));
+
+    // 4. Mode content
+    if (filters.recMode) {
+      renderRecModeContent(root, chains, nearbyIds, rem, tg);
+    } else {
+      renderBrowseModeContent(root, chains, nearbyIds, rem);
+    }
+
+    window.scrollTo(0, savedY);
+  }
+
+  function buildToggleRow() {
+    var cb = el("input", { type: "checkbox", id: "rec-mode-cb", class: "toggle-input" });
+    if (filters.recMode) cb.setAttribute("checked", "checked");
+    cb.addEventListener("change", function () {
+      filters.recMode = cb.checked;
+      saveFilter("mm_rec_mode", cb.checked);
+      renderMenu();
+    });
+    return el("div", { class: "card rec-toggle-row" }, [
+      el("div", { class: "toggle-label" }, [
+        el("span", { class: "toggle-text" }, "Recommendations"),
+        el("span", { class: "toggle-sub muted small" },
+          filters.recMode ? "Ranked by your remaining macros" : "Browse items manually")
+      ]),
+      el("label", { class: "toggle-switch", for: "rec-mode-cb" }, [cb,
+        el("span", { class: "toggle-track" }, [el("span", { class: "toggle-thumb" })])
+      ])
+    ]);
+  }
+
+  function buildSharedFilters(chains) {
+    var wrap = el("div", { class: "card shared-filters" });
+
+    // Category chips — derived dynamically from all items
+    var catSeen = {};
+    var allCats = [];
+    (window.MM.allItems ? window.MM.allItems() : []).forEach(function (it) {
+      if (it.category && !catSeen[it.category]) { catSeen[it.category] = true; allCats.push(it.category); }
+    });
+    allCats.sort();
+
+    var chipsRow = el("div", { class: "filter-chips" });
+    chipsRow.appendChild(el("button", {
+      class: "chip" + (!filters.category ? " active" : ""),
+      onclick: function () { filters.category = ""; saveFilter("mm_filter_category", ""); renderMenu(); }
+    }, "All"));
+    allCats.forEach(function (cat) {
+      chipsRow.appendChild(el("button", {
+        class: "chip" + (filters.category === cat ? " active" : ""),
+        onclick: function () { filters.category = cat; saveFilter("mm_filter_category", cat); renderMenu(); }
+      }, cat));
+    });
+    wrap.appendChild(chipsRow);
+
+    // Favorites chip
+    wrap.appendChild(el("button", {
+      class: "chip fav-chip" + (filters.favorites ? " active" : ""),
+      onclick: function () { filters.favorites = !filters.favorites; saveFilter("mm_filter_favorites", filters.favorites); renderMenu(); }
+    }, "⭐ Favorites only"));
+
+    // Active filter bar
+    var activeLabels = [];
+    if (filters.category) activeLabels.push(filters.category);
+    // Chain is always required in browse mode (selector is visible), so only
+    // show it as a filter label in rec mode where "All" is the default.
+    if (filters.recMode && filters.chainId) {
+      var fc = window.MM.getChainById(filters.chainId);
+      if (fc) activeLabels.push(fc.name);
+    }
+    if (filters.favorites) activeLabels.push("⭐");
+    if (!filters.recMode && filters.search) activeLabels.push('"' + filters.search + '"');
+    if (!filters.recMode && filters.fit) activeLabels.push("Fit only");
+
+    if (activeLabels.length) {
+      wrap.appendChild(el("div", { class: "active-filters-bar" }, [
+        el("span", { class: "muted small" }, "Filtered: " + activeLabels.join(" · ")),
+        el("button", { class: "link-btn small", onclick: clearAllFilters }, "× Clear all")
+      ]));
+    }
+
+    return wrap;
+  }
+
+  function clearAllFilters() {
+    filters.category = ""; filters.search = ""; filters.favorites = false; filters.fit = false;
+    // Keep chainId and recMode — those are intent, not filters
+    ["mm_filter_category", "mm_filter_search"].forEach(function (k) { localStorage.setItem(k, ""); });
+    localStorage.setItem("mm_filter_favorites", "false");
+    localStorage.setItem("mm_filter_fit", "false");
+    renderMenu();
+  }
+
+  function applySharedItemFilters(items) {
+    if (filters.category) items = items.filter(function (it) { return it.category === filters.category; });
+    if (filters.favorites) {
+      var favMap = {};
+      window.MM.store.getFavorites().forEach(function (f) { favMap[f.name] = true; });
+      items = items.filter(function (it) { return favMap[it.name]; });
+    }
+    return items;
+  }
+
+  function renderBrowseModeContent(root, chains, nearbyIds, rem) {
     var controls = el("div", { class: "card menu-controls" });
+
     var chainSel = select("chain", chains.map(function (c) {
       var near = nearbyIds.indexOf(c.id) !== -1;
       return { v: c.id, label: c.name + (near ? "  ·  nearby" : "") };
-    }), state.selectedChainId, function (e) {
-      state.selectedChainId = e.target.value; renderMenu();
+    }), filters.chainId, function (e) {
+      filters.chainId = e.target.value;
+      saveFilter("mm_filter_chain", filters.chainId);
+      renderMenu();
     });
     controls.appendChild(field("Restaurant", chainSel));
 
-    var searchInput = el("input", { class: "input", id: "menu-search", placeholder: "Search items…", type: "text" });
+    var searchInput = el("input", { class: "input", id: "menu-search", placeholder: "Search items…", type: "text",
+      value: filters.search || "" });
     controls.appendChild(field("Search", searchInput));
 
     var sortSel = select("sort", [
@@ -764,34 +926,37 @@ window.MM.app = (function () {
       { v: "protein", label: "Most protein" },
       { v: "cal_asc", label: "Fewest calories" },
       { v: "cal_desc", label: "Most calories" }
-    ], "ppc");
+    ], filters.sort || "ppc");
     controls.appendChild(field("Sort by", sortSel));
 
     var fitOnly = el("input", { type: "checkbox", id: "fit-only" });
-    var fitLabel = el("label", { class: "check" }, [fitOnly, el("span", null, "Only items that fit my remaining calories")]);
+    if (filters.fit) fitOnly.setAttribute("checked", "checked");
     var compareHint = el("span", { class: "compare-hint muted small" }, "↔ Tick Compare on items to compare side-by-side");
-    controls.appendChild(el("div", { class: "field span2 menu-foot-row" }, [fitLabel, compareHint]));
+    controls.appendChild(el("div", { class: "field span2 menu-foot-row" }, [
+      el("label", { class: "check" }, [fitOnly, el("span", null, "Only items that fit my remaining calories")]),
+      compareHint
+    ]));
 
     root.appendChild(controls);
 
     var listWrap = el("div", { id: "menu-list", class: "card-list" });
     root.appendChild(listWrap);
-
     var compareBar = el("div", { id: "compare-bar", class: "compare-bar hidden" });
     root.appendChild(compareBar);
 
     function draw() {
-      var chain = window.MM.getChainById(state.selectedChainId);
-      var savedY = window.scrollY;
+      var chain = window.MM.getChainById(filters.chainId);
+      if (!chain) { listWrap.appendChild(emptyHint("Select a restaurant.")); return; }
+      var savedY2 = window.scrollY;
       ui.clear(listWrap);
       var q = searchInput.value.trim().toLowerCase();
       var sort = sortSel.value;
-      var rem = remaining();
       var fit = fitOnly.checked && rem;
 
       var items = chain.items.map(function (it) {
         return Object.assign({ chainId: chain.id, chainName: chain.name, chainColor: chain.color }, it);
       });
+      items = applySharedItemFilters(items);
       if (q) items = items.filter(function (it) {
         return it.name.toLowerCase().indexOf(q) !== -1 || (it.category || "").toLowerCase().indexOf(q) !== -1;
       });
@@ -801,18 +966,15 @@ window.MM.app = (function () {
         if (sort === "protein") return b.protein - a.protein;
         if (sort === "cal_asc") return a.kcal - b.kcal;
         if (sort === "cal_desc") return b.kcal - a.kcal;
-        return (b.protein / b.kcal) - (a.protein / a.kcal); // ppc
+        return (b.protein / b.kcal) - (a.protein / a.kcal);
       });
 
-      if (!items.length) { listWrap.appendChild(emptyHint("No items match.")); window.scrollTo(0, savedY); return; }
+      if (!items.length) { listWrap.appendChild(browseEmptyState()); window.scrollTo(0, savedY2); return; }
 
       var chainCfg = window.MM.getChainConfig(chain);
-
-      // Plate builder entry card — shown above items for plate_builder chains
       if (chainCfg.interaction_type === "plate_builder") {
         var pbRoles = chainCfg.category_roles || {};
         var pbRoleKeys = Object.keys(pbRoles);
-        // Show card if at least one configured role has items with matching categories
         var hasAnyRoleItems = pbRoleKeys.length === 0
           ? chain.items.length > 0
           : pbRoleKeys.some(function (role) {
@@ -833,14 +995,232 @@ window.MM.app = (function () {
       }
 
       items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw, chain, chainCfg)); });
-      window.scrollTo(0, savedY);
+      window.scrollTo(0, savedY2);
     }
 
-    searchInput.addEventListener("input", draw);
-    sortSel.addEventListener("change", draw);
-    fitOnly.addEventListener("change", draw);
+    searchInput.addEventListener("input", function () {
+      filters.search = searchInput.value;
+      saveFilter("mm_filter_search", filters.search);
+      draw();
+    });
+    sortSel.addEventListener("change", function () {
+      filters.sort = sortSel.value;
+      saveFilter("mm_filter_sort", filters.sort);
+      draw();
+    });
+    fitOnly.addEventListener("change", function () {
+      filters.fit = fitOnly.checked;
+      saveFilter("mm_filter_fit", filters.fit);
+      draw();
+    });
+
     draw();
     drawCompareBar();
+  }
+
+  function renderRecModeContent(root, chains, nearbyIds, rem, tg) {
+    if (!tg) {
+      root.appendChild(noticeCard("Set up your profile first",
+        "We need your calorie & macro targets to recommend food. Head to the Profile tab.",
+        "Go to Profile", function () { navigate("profile"); }));
+      return;
+    }
+
+    // Chain selector (optional; hides scope radio when set)
+    var recCtrlCard = el("div", { class: "card" });
+    var chainOptions = [{ v: "", label: "All chains" }].concat(chains.map(function (c) {
+      var near = nearbyIds.indexOf(c.id) !== -1;
+      return { v: c.id, label: c.name + (near ? " · nearby" : "") };
+    }));
+    var recChainSel = select("rec_chain", chainOptions, filters.chainId || "", function (e) {
+      filters.chainId = e.target.value;
+      saveFilter("mm_filter_chain", filters.chainId);
+      renderMenu();
+    });
+    recCtrlCard.appendChild(field("Chain (optional)", recChainSel));
+
+    var scopeNear = el("input", { type: "radio", name: "scope", value: "near",
+      checked: (!filters.chainId && nearbyIds.length) ? "checked" : null,
+      disabled: nearbyIds.length ? null : "disabled" });
+    var scopeAll = el("input", { type: "radio", name: "scope", value: "all",
+      checked: (!filters.chainId || !nearbyIds.length) ? "checked" : null });
+    var scopeRow = el("div", { class: "scope-row" + (filters.chainId ? " hidden" : "") }, [
+      el("label", { class: "check tiny" }, [scopeNear,
+        el("span", null, "Only chains near me" + (nearbyIds.length ? " (" + nearbyIds.length + ")" : " — search Discover first"))]),
+      el("label", { class: "check tiny" }, [scopeAll, el("span", null, "All chains in database")])
+    ]);
+    recCtrlCard.appendChild(scopeRow);
+    root.appendChild(recCtrlCard);
+
+    // Quick picks (collapsible, starts open)
+    var qpCollapsed = false;
+    var qpChevron = el("span", { class: "collapsible-chevron" }, "▼");
+    var qpHead = el("div", { class: "section-label collapsible-head" }, [qpChevron, "Quick picks"]);
+    var presetWrap = el("div", { class: "preset-wrap collapsible-body" });
+    Object.keys(window.MM.recommend.PRESETS).forEach(function (key) {
+      var preset = window.MM.recommend.PRESETS[key];
+      presetWrap.appendChild(el("button", {
+        class: "preset", onclick: function () { runRecommend(preset.opts); }
+      }, preset.label));
+    });
+    qpHead.addEventListener("click", function () {
+      qpCollapsed = !qpCollapsed;
+      qpChevron.textContent = qpCollapsed ? "▶" : "▼";
+      presetWrap.classList.toggle("collapsed", qpCollapsed);
+    });
+    root.appendChild(el("div", { class: "card" }, [qpHead, presetWrap]));
+
+    // Meal Combos
+    root.appendChild(buildCombosSection(rem));
+
+    // Custom search (collapsible, starts collapsed)
+    var csCollapsed = true;
+    var csChevron = el("span", { class: "collapsible-chevron" }, "▶");
+    var csHead = el("div", { class: "section-label collapsible-head" }, [csChevron, "Custom search"]);
+    var custom = el("div", { class: "card" });
+    var csBody = el("div", { class: "form-grid collapsible-body collapsed" });
+    csBody.appendChild(field("Max calories", numInput("c_maxKcal", "", 0, 3000)));
+    csBody.appendChild(field("Min protein (g)", numInput("c_minProtein", "", 0, 200)));
+    csBody.appendChild(field("Max sodium (mg)", numInput("c_maxSodium", "", 0, 4000)));
+    csBody.appendChild(field("Max sugar (g)", numInput("c_maxSugar", "", 0, 200)));
+    csBody.appendChild(field("Meal size", select("c_mealSize", [
+      { v: "", label: "Any" }, { v: "snack", label: "Snack" }, { v: "regular", label: "Regular" }, { v: "large", label: "Large" }
+    ], "")));
+    csBody.appendChild(field("Prioritize", select("c_prioritize", [
+      { v: "protein", label: "Protein efficiency" }, { v: "lowcal", label: "Low calorie" },
+      { v: "lowcarb", label: "Low carb" }, { v: "lowfat", label: "Low fat" }
+    ], "protein")));
+    csBody.appendChild(el("div", { class: "span2 form-actions" }, [
+      el("button", { class: "btn primary", onclick: function () {
+        runRecommend({
+          maxKcal: numOrNull(custom, "c_maxKcal"), minProtein: numOrNull(custom, "c_minProtein"),
+          maxSodium: numOrNull(custom, "c_maxSodium"), maxSugar: numOrNull(custom, "c_maxSugar"),
+          mealSize: custom.querySelector('[name="c_mealSize"]').value || null,
+          prioritize: custom.querySelector('[name="c_prioritize"]').value
+        });
+      } }, "Find matches")
+    ]));
+    csHead.addEventListener("click", function () {
+      csCollapsed = !csCollapsed;
+      csChevron.textContent = csCollapsed ? "▶" : "▼";
+      csBody.classList.toggle("collapsed", csCollapsed);
+    });
+    custom.appendChild(csHead); custom.appendChild(csBody);
+    root.appendChild(custom);
+
+    var results = el("div", { id: "rec-results", class: "card-list" });
+    root.appendChild(results);
+
+    runRecommend(window.MM.recommend.PRESETS.fits_remaining.opts);
+
+    function getChainIds() {
+      if (filters.chainId) return [filters.chainId];
+      var scopeEl = root.querySelector('input[name="scope"]:checked');
+      if (scopeEl && scopeEl.value === "near") return nearbyIds;
+      return null;
+    }
+
+    function runRecommend(opts) {
+      var ids = getChainIds();
+      var rem2 = remaining();
+      var ranked = window.MM.recommend.rank(rem2, opts, ids, 50);
+      ranked = applySharedItemFilters(ranked).slice(0, 15);
+      ui.clear(results);
+      var scopeChain = filters.chainId ? window.MM.getChainById(filters.chainId) : null;
+      var scopeLabel = scopeChain ? scopeChain.name : (ids ? "chains near you" : "all chains");
+      results.appendChild(el("div", { class: "list-head" }, [
+        el("strong", null, "Top matches"),
+        el("span", { class: "muted small" }, "from " + scopeLabel)
+      ]));
+      if (!ranked.length) { results.appendChild(recEmptyState()); return; }
+      ranked.forEach(function (it, i) { results.appendChild(recCard(it, i + 1)); });
+    }
+  }
+
+  function buildCombosSection(rem) {
+    var collapsed = !filters.combosOpen;
+    var chevron = el("span", { class: "collapsible-chevron" }, collapsed ? "▶" : "▼");
+    var head = el("div", { class: "section-label collapsible-head" }, [chevron, "Meal Combos"]);
+    var body = el("div", { class: "combos-body collapsible-body" + (collapsed ? " collapsed" : "") });
+    var built = false;
+
+    function buildCombos() {
+      if (built) return; built = true;
+      ui.clear(body);
+      body.appendChild(el("p", { class: "muted small", style: "margin:0 0 10px" },
+        "Same-chain entree + side that together fit your remaining calorie budget."));
+      if (!rem || rem.kcal <= 0) {
+        body.appendChild(emptyHint("Log some food today to see combos based on your remaining macros."));
+        return;
+      }
+      var combos = window.MM.recommend.suggestCombos(rem, filters.chainId || null, filters.category || null, 5);
+      if (!combos.length) {
+        body.appendChild(emptyHint("No combos found within your remaining budget. Try clearing chain or category filters."));
+        return;
+      }
+      combos.forEach(function (combo) { body.appendChild(comboCard(combo)); });
+    }
+
+    head.addEventListener("click", function () {
+      collapsed = !collapsed;
+      chevron.textContent = collapsed ? "▶" : "▼";
+      body.classList.toggle("collapsed", collapsed);
+      filters.combosOpen = !collapsed;
+      saveFilter("mm_combos_open", !collapsed);
+      if (!collapsed) buildCombos();
+    });
+    if (!collapsed) buildCombos();
+    return el("div", { class: "card" }, [head, body]);
+  }
+
+  function comboCard(combo) {
+    var totItem = {
+      kcal: combo.entree.kcal + combo.side.kcal,
+      protein: combo.entree.protein + combo.side.protein,
+      carbs: combo.entree.carbs + combo.side.carbs,
+      fat: combo.entree.fat + combo.side.fat
+    };
+    function itemRow(it, roleLabel) {
+      return el("div", { class: "combo-item-row" }, [
+        el("div", { class: "combo-item-info" }, [
+          el("span", { class: "combo-role-badge" }, roleLabel),
+          el("span", { class: "combo-item-name" }, it.name)
+        ]),
+        el("div", { class: "combo-item-right" }, [
+          ui.macroPills(it),
+          el("button", { class: "btn small primary", onclick: function () { addToLog(it, 1); } }, "Add")
+        ])
+      ]);
+    }
+    var card = el("div", { class: "card combo-card" });
+    card.appendChild(el("div", { class: "combo-chain" }, combo.chainName));
+    card.appendChild(itemRow(combo.entree, "Entree"));
+    card.appendChild(itemRow(combo.side, "Side"));
+    card.appendChild(el("div", { class: "combo-totals" }, [
+      el("span", { class: "muted small" }, "Combined: "),
+      ui.macroPills(totItem)
+    ]));
+    return card;
+  }
+
+  function browseEmptyState() {
+    return el("div", { class: "card empty-state" }, [
+      el("div", { class: "empty-state-icon" }, "🔍"),
+      el("p", null, "No items match your filters."),
+      el("button", { class: "btn", onclick: clearAllFilters }, "Clear filters")
+    ]);
+  }
+
+  function recEmptyState() {
+    return el("div", { class: "empty-state" }, [
+      el("p", null, "No items match. Try loosening your filters or clearing them."),
+      el("button", { class: "btn", onclick: function () {
+        filters.category = ""; filters.chainId = ""; filters.favorites = false;
+        saveFilter("mm_filter_category", ""); saveFilter("mm_filter_chain", "");
+        saveFilter("mm_filter_favorites", "false");
+        renderMenu();
+      } }, "Clear filters")
+    ]);
   }
 
   function itemFlags(it) {
@@ -972,120 +1352,10 @@ window.MM.app = (function () {
    *  RECOMMEND VIEW
    * ===================================================================== */
 
-  function renderRecommend() {
-    var root = document.getElementById("view-recommend");
-    var savedY = window.scrollY;
-    ui.clear(root);
-    root.appendChild(header("Recommended for you", "Picks ranked by how well they fit your remaining macros today.",
-      helpBtn("How recommendations work", recommendHelp())));
-
-    if (!window.MM.NUTRITION || !window.MM.NUTRITION.length) {
-      root.appendChild(noticeCard(
-        nutritionError ? "Couldn't load restaurant data" : "Loading restaurant data…",
-        nutritionError || "Fetching menus from the database — this only takes a moment.",
-        nutritionError ? "Reload" : null,
-        nutritionError ? function () { location.reload(); } : null
-      ));
-      return;
-    }
-
-    var tg = window.MM.store.getTargets();
-    if (!tg) {
-      root.appendChild(noticeCard("Set up your profile first", "We need your calorie & macro targets to recommend food. Head to the Profile tab.",
-        "Go to Profile", function () { navigate("profile"); }));
-      return;
-    }
-
-    var rem = remaining();
-    root.appendChild(remainingStrip(rem));
-
-    var nearbyIds = availableChainIds();
-    var scopeCard = el("div", { class: "card" });
-    var scopeNear = el("input", { type: "radio", name: "scope", value: "near", checked: nearbyIds.length ? "checked" : null, disabled: nearbyIds.length ? null : "disabled" });
-    var scopeAll = el("input", { type: "radio", name: "scope", value: "all", checked: nearbyIds.length ? null : "checked" });
-    scopeCard.appendChild(el("div", { class: "scope-row" }, [
-      el("label", { class: "check tiny" }, [scopeNear, el("span", null, "Only chains near me" + (nearbyIds.length ? " (" + nearbyIds.length + ")" : " — search Discover first"))]),
-      el("label", { class: "check tiny" }, [scopeAll, el("span", null, "All chains in database")])
-    ]));
-    root.appendChild(scopeCard);
-
-    // presets (collapsible, starts open)
-    var qpCollapsed = false;
-    var qpChevron = el("span", { class: "collapsible-chevron" }, "▼");
-    var qpHead = el("div", { class: "section-label collapsible-head" }, [qpChevron, "Quick picks"]);
-    var presetWrap = el("div", { class: "preset-wrap collapsible-body" });
-    Object.keys(window.MM.recommend.PRESETS).forEach(function (key) {
-      var preset = window.MM.recommend.PRESETS[key];
-      presetWrap.appendChild(el("button", {
-        class: "preset", onclick: function () { runRecommend(preset.opts); }
-      }, preset.label));
-    });
-    qpHead.addEventListener("click", function () {
-      qpCollapsed = !qpCollapsed;
-      qpChevron.textContent = qpCollapsed ? "▶" : "▼";
-      presetWrap.classList.toggle("collapsed", qpCollapsed);
-    });
-    root.appendChild(el("div", { class: "card" }, [qpHead, presetWrap]));
-
-    // custom filters (collapsible, starts collapsed)
-    var csCollapsed = true;
-    var csChevron = el("span", { class: "collapsible-chevron" }, "▶");
-    var csHead = el("div", { class: "section-label collapsible-head" }, [csChevron, "Custom search"]);
-    var custom = el("div", { class: "card" });
-    var csBody = el("div", { class: "form-grid collapsible-body collapsed" });
-    csBody.appendChild(field("Max calories", numInput("c_maxKcal", "", 0, 3000)));
-    csBody.appendChild(field("Min protein (g)", numInput("c_minProtein", "", 0, 200)));
-    csBody.appendChild(field("Max sodium (mg)", numInput("c_maxSodium", "", 0, 4000)));
-    csBody.appendChild(field("Max sugar (g)", numInput("c_maxSugar", "", 0, 200)));
-    csBody.appendChild(field("Meal size", select("c_mealSize", [
-      { v: "", label: "Any" }, { v: "snack", label: "Snack" }, { v: "regular", label: "Regular" }, { v: "large", label: "Large" }
-    ], "")));
-    csBody.appendChild(field("Prioritize", select("c_prioritize", [
-      { v: "protein", label: "Protein efficiency" }, { v: "lowcal", label: "Low calorie" },
-      { v: "lowcarb", label: "Low carb" }, { v: "lowfat", label: "Low fat" }
-    ], "protein")));
-    csBody.appendChild(el("div", { class: "span2 form-actions" }, [
-      el("button", { class: "btn primary", onclick: function () {
-        runRecommend({
-          maxKcal: numOrNull(custom, "c_maxKcal"),
-          minProtein: numOrNull(custom, "c_minProtein"),
-          maxSodium: numOrNull(custom, "c_maxSodium"),
-          maxSugar: numOrNull(custom, "c_maxSugar"),
-          mealSize: custom.querySelector('[name="c_mealSize"]').value || null,
-          prioritize: custom.querySelector('[name="c_prioritize"]').value
-        });
-      } }, "Find matches")
-    ]));
-    csHead.addEventListener("click", function () {
-      csCollapsed = !csCollapsed;
-      csChevron.textContent = csCollapsed ? "▶" : "▼";
-      csBody.classList.toggle("collapsed", csCollapsed);
-    });
-    custom.appendChild(csHead);
-    custom.appendChild(csBody);
-    root.appendChild(custom);
-
-    var results = el("div", { id: "rec-results", class: "card-list" });
-    root.appendChild(results);
-
-    // run a sensible default
-    runRecommend(window.MM.recommend.PRESETS.fits_remaining.opts);
-
-    function runRecommend(opts) {
-      var scope = root.querySelector('input[name="scope"]:checked').value;
-      var ids = scope === "near" ? nearbyIds : null;
-      var rem2 = remaining();
-      var ranked = window.MM.recommend.rank(rem2, opts, ids, 15);
-      ui.clear(results);
-      results.appendChild(el("div", { class: "list-head" }, [
-        el("strong", null, "Top matches"),
-        el("span", { class: "muted small" }, scope === "near" ? "from chains near you" : "from all chains")
-      ]));
-      if (!ranked.length) { results.appendChild(emptyHint("No items match those filters. Loosen them a bit.")); return; }
-      ranked.forEach(function (it, i) { results.appendChild(recCard(it, i + 1)); });
-    }
-    window.scrollTo(0, savedY);
-  }
+  // Legacy For You tab is now the Browse tab with recommendations on.
+  // This stub is kept so any remaining navigate("recommend") calls still work;
+  // navigate() itself also redirects "recommend" → "menu" before calling here.
+  function renderRecommend() { navigate("menu"); }
 
   function recCard(it, rankNum) {
     var head = el("div", { class: "item-head" }, [
@@ -1098,7 +1368,7 @@ window.MM.app = (function () {
       ]),
       el("div", { class: "item-head-right" }, [
         el("div", { class: "score", title: "fit score" }, ui.fmt(Math.max(it._score, 0))),
-        starButton(it, renderRecommend)
+        starButton(it, renderMenu)
       ])
     ]);
     var reasons = el("div", { class: "reasons" }, (it._reasons || []).slice(0, 3).map(function (r) {
@@ -1209,7 +1479,7 @@ window.MM.app = (function () {
       ]) : null
     ]));
     if (!entries.length) {
-      logCard.appendChild(emptyHint("Nothing logged yet. Add items from Menus, For You, or quick-add above."));
+      logCard.appendChild(emptyHint("Nothing logged yet. Add items from Browse or quick-add above."));
     } else {
       // Group entries into meal buckets — gives the log breakfast/lunch/dinner/
       // snack structure, with each bucket showing its own totals. Unknown meals
@@ -1253,18 +1523,18 @@ window.MM.app = (function () {
     } else if (!logged) {
       emoji = "🌅";
       msg = "Fresh start: " + ui.fmt(rem.kcal) + " cal and " + ui.fmt(Math.max(rem.protein, 0)) + "g protein to go. Log your first item to get rolling.";
-      action = { label: "Find food →", view: "recommend" };
+      action = { label: "Find food →", view: "menu" };
     } else if (rem.protein > 25 && rem.kcal > 150) {
       emoji = "💪";
       msg = "You have " + ui.fmt(rem.protein) + "g protein and " + ui.fmt(rem.kcal) + " cal left — a high-protein pick would round out your day.";
-      action = { label: "See picks →", view: "recommend" };
+      action = { label: "See picks →", view: "menu" };
     } else if (rem.kcal <= 120 && rem.protein <= 15) {
       emoji = "🎯";
       msg = "Dialed in — you've essentially hit your calories and protein for today. Nice work.";
     } else {
       emoji = "🍽️";
       msg = ui.fmt(Math.max(rem.kcal, 0)) + " cal left and " + ui.fmt(Math.max(rem.protein, 0)) + "g protein to go.";
-      action = { label: "Find food →", view: "recommend" };
+      action = { label: "Find food →", view: "menu" };
     }
 
     var children = [el("span", { class: "coach-emoji" }, emoji), el("div", { class: "coach-msg" }, msg)];
@@ -2396,7 +2666,6 @@ window.MM.app = (function () {
     var v = state.view;
     if (v === "profile") renderProfile();
     else if (v === "menu") renderMenu();
-    else if (v === "recommend") renderRecommend();
     else if (v === "tracker") renderTracker();
     else if (v === "requests") renderRequests();
     else if (v === "admin") renderAdmin();
@@ -2543,7 +2812,8 @@ window.MM.app = (function () {
 
   function start() {
     renderNav();
-    var landing = window.MM.store.getProfile() ? "tracker" : "profile";
+    var landing = !window.MM.store.getProfile() ? "onboarding"
+      : (state.view === "onboarding" ? "tracker" : "tracker");
     navigate(landing);
     renderNavBadge();
 
@@ -2561,10 +2831,10 @@ window.MM.app = (function () {
     // when it arrives; show an error in those views if the load fails.
     window.MM.data.loadNutrition(function () {
       nutritionError = null;
-      if (state.view === "menu" || state.view === "recommend") refreshCurrent();
+      if (state.view === "menu" || state.view === "onboarding") refreshCurrent();
     }).catch(function (e) {
       nutritionError = e.message || "Couldn't reach the server.";
-      if (state.view === "menu" || state.view === "recommend") refreshCurrent();
+      if (state.view === "menu") refreshCurrent();
     });
 
     var fb = document.getElementById("feedback-link");
@@ -2640,6 +2910,111 @@ window.MM.app = (function () {
       ]);
     }
     ui.modal("Install Macro Map", body, [{ label: "Got it", kind: "primary" }]);
+  }
+
+  /* =====================================================================
+   *  ONBOARDING WIZARD (new users only — shown when no profile exists)
+   * ===================================================================== */
+
+  function renderOnboarding() {
+    var root = document.getElementById("view-onboarding");
+    if (!root) return;
+    ui.clear(root);
+    var step = parseInt(localStorage.getItem("mm_onboarding_step") || "0", 10);
+    var m = window.MM.macros;
+
+    function goStep(n) { localStorage.setItem("mm_onboarding_step", String(n)); renderOnboarding(); }
+
+    function stepHeader(num, title, sub) {
+      return el("div", { class: "onboard-header card" }, [
+        el("div", { class: "onboard-steps" },
+          [1, 2, 3].map(function (i) {
+            return el("div", { class: "onboard-dot" + (i === num ? " active" : i < num ? " done" : "") });
+          })
+        ),
+        el("h2", null, title),
+        el("p", { class: "muted" }, sub)
+      ]);
+    }
+
+    if (step === 0) {
+      root.appendChild(stepHeader(1, "Set your goals",
+        "Tell us about yourself and we'll calculate your daily calorie and macro targets."));
+
+      var defaults = {
+        age: 30, sex: "male", heightCm: 178, weightKg: m.lbToKg(175),
+        units: "imperial", activity: "moderate", goal: "lose", rate: "0.5", focus: "fat_loss"
+      };
+      root.appendChild(buildProfileForm(defaults, {
+        submitLabel: "Next →",
+        cancelLabel: "Skip setup",
+        onCancel: function () {
+          window.MM.store.setProfile(defaults);
+          window.MM.store.setTargets(m.compute(defaults));
+          goStep(2);
+        },
+        onSubmit: function (prof) {
+          window.MM.store.setProfile(prof);
+          window.MM.store.setTargets(m.compute(prof));
+          goStep(1);
+        }
+      }));
+
+    } else if (step === 1) {
+      if (!window.MM.NUTRITION || !window.MM.NUTRITION.length) { goStep(2); return; }
+
+      root.appendChild(stepHeader(2, "Pick your usual spots",
+        "We'll use these as your default when finding recommendations. You can change this anytime."));
+
+      var preferred = JSON.parse(localStorage.getItem("mm_preferred_chains") || "[]");
+      var chainGrid = el("div", { class: "card chain-pick-grid" });
+      window.MM.NUTRITION.forEach(function (chain) {
+        var btn = el("button", {
+          class: "chain-pick-btn" + (preferred.indexOf(chain.id) !== -1 ? " on" : ""),
+          onclick: function () {
+            var idx = preferred.indexOf(chain.id);
+            if (idx === -1) preferred.push(chain.id);
+            else preferred.splice(idx, 1);
+            localStorage.setItem("mm_preferred_chains", JSON.stringify(preferred));
+            btn.classList.toggle("on", preferred.indexOf(chain.id) !== -1);
+          }
+        }, chain.name);
+        chainGrid.appendChild(btn);
+      });
+      root.appendChild(chainGrid);
+      root.appendChild(el("div", { class: "form-actions" }, [
+        el("button", { class: "btn primary", onclick: function () { goStep(2); } }, "Next →"),
+        el("button", { class: "btn ghost", onclick: function () { goStep(2); } }, "Skip")
+      ]));
+
+    } else {
+      root.appendChild(stepHeader(3, "You're all set! 🎉", "Here are your daily targets."));
+
+      var tg = window.MM.store.getTargets();
+      if (tg) root.appendChild(targetsCard(tg, window.MM.store.getProfile()));
+
+      if (window.MM.NUTRITION && window.MM.NUTRITION.length) {
+        var preferred2 = JSON.parse(localStorage.getItem("mm_preferred_chains") || "[]");
+        var ids = preferred2.length ? preferred2 : null;
+        var rem2 = remaining();
+        var ranked = window.MM.recommend.rank(rem2, window.MM.recommend.PRESETS.fits_remaining.opts, ids, 3);
+        if (ranked.length) {
+          var previewCard = el("div", { class: "card" });
+          previewCard.appendChild(el("div", { class: "section-label" }, "Top picks for you right now"));
+          ranked.forEach(function (it, i) { previewCard.appendChild(recCard(it, i + 1)); });
+          root.appendChild(previewCard);
+        }
+      }
+
+      root.appendChild(el("div", { class: "form-actions" }, [
+        el("button", { class: "btn primary", onclick: function () {
+          localStorage.removeItem("mm_onboarding_step");
+          filters.recMode = true;
+          saveFilter("mm_rec_mode", true);
+          navigate("menu");
+        } }, "Start browsing →")
+      ]));
+    }
   }
 
   return {
