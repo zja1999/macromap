@@ -18,6 +18,7 @@ window.MM.store = (function () {
     requests: [],         // [ { id, chain, note, lat, lng, date } ]
     lastLocation: null,   // { lat, lng, label }
     weights: {},          // { "YYYY-MM-DD": kg } — body weight log, stored in kg
+    bodyFats: {},         // { "YYYY-MM-DD": % } — body fat percentage log
     habits: null,         // [ { id, name, emoji } ] — null until seeded with defaults
     habitLog: {},         // { "YYYY-MM-DD": { habitId: true } }
     favorites: []         // [ { id, name, chainId?, chainName?, kcal, protein, carbs, fat, sodium, fiber, sugar, custom } ]
@@ -203,6 +204,24 @@ window.MM.store = (function () {
         .filter(function (k) { return typeof state.weights[k] === "number"; })
         .sort()
         .map(function (k) { return { date: k, kg: state.weights[k] }; });
+    },
+
+    // ---- body fat % log ----
+    getBodyFat: function (dateKey) {
+      var k = dateKey || todayKey();
+      return typeof state.bodyFats[k] === "number" ? state.bodyFats[k] : null;
+    },
+    setBodyFat: function (pct, dateKey) {
+      var k = dateKey || todayKey();
+      if (pct == null || isNaN(pct)) { delete state.bodyFats[k]; }
+      else { state.bodyFats[k] = Math.round(pct * 10) / 10; }
+      persist();
+    },
+    bodyFatSeries: function () {
+      return Object.keys(state.bodyFats)
+        .filter(function (k) { return typeof state.bodyFats[k] === "number"; })
+        .sort()
+        .map(function (k) { return { date: k, pct: state.bodyFats[k] }; });
     },
 
     // ---- habits ----

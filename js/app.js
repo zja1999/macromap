@@ -287,6 +287,13 @@ window.MM.app = (function () {
     }
     rerenderMeasures();
 
+    form.appendChild(field("Body fat % (optional)",
+      el("div", { class: "inline" }, [
+        numInput("bodyFatPct", p.bodyFatPct || "", 3, 60, ""),
+        el("span", { class: "unit" }, "% · unlocks LBM-based protein & Katch-McArdle BMR")
+      ])
+    ));
+
     form.appendChild(field("Activity level", select("activity",
       Object.keys(m.ACTIVITY).map(function (k) { return { v: k, label: m.ACTIVITY[k].label }; }), p.activity), "span2"));
 
@@ -357,6 +364,8 @@ window.MM.app = (function () {
       heightCm = parseFloat(form.querySelector('[name="heightCm"]').value) || 0;
       weightKg = parseFloat(form.querySelector('[name="weightKg"]').value) || 0;
     }
+    var bfRaw = parseFloat(form.querySelector('[name="bodyFatPct"]').value);
+    var bodyFatPct = (!isNaN(bfRaw) && bfRaw > 0 && bfRaw < 100) ? bfRaw : null;
     return {
       age: parseInt(form.querySelector('[name="age"]').value, 10) || 30,
       sex: form.querySelector('[name="sex"]').value,
@@ -366,7 +375,8 @@ window.MM.app = (function () {
       activity: form.querySelector('[name="activity"]').value,
       goal: form.querySelector('[name="goal"]').value,
       rate: form.querySelector('[name="rate"]').value,
-      focus: form.querySelector('[name="focus"]').value
+      focus: form.querySelector('[name="focus"]').value,
+      bodyFatPct: bodyFatPct
     };
   }
 
@@ -379,7 +389,8 @@ window.MM.app = (function () {
 
     if (p) {
       card.appendChild(el("p", { class: "muted small" },
-        "Based on BMR " + ui.fmt(t.bmr || 0) + " · maintenance ≈ " + ui.fmt(t.tdee || 0) + " cal/day."));
+        "Based on BMR " + ui.fmt(t.bmr || 0) + " · maintenance ≈ " + ui.fmt(t.tdee || 0) + " cal/day" +
+        (p.bodyFatPct ? " · LBM " + Math.round(p.weightKg * (1 - p.bodyFatPct / 100) * 10) / 10 + " kg" : "") + "."));
     }
 
     var grid = el("div", { class: "target-grid" }, [
@@ -389,6 +400,34 @@ window.MM.app = (function () {
       bigStat(ui.fmt(t.fat) + "g", "fat", "f")
     ]);
     card.appendChild(grid);
+
+    if (p && !t.manual) {
+      var expCollapsed = true;
+      var expChevron = el("span", { class: "collapsible-chevron" }, "▶");
+      var expHead = el("div", { class: "calc-explain-head collapsible-head" }, [expChevron, "How were these calculated?"]);
+      var expBody = el("div", { class: "collapsible-body collapsed" });
+      expBody.appendChild(buildCalcExplain(t, p));
+      expHead.addEventListener("click", function () {
+        expCollapsed = !expCollapsed;
+        expChevron.textContent = expCollapsed ? "▶" : "▼";
+        expBody.classList.toggle("collapsed", expCollapsed);
+      });
+      card.appendChild(expHead);
+      card.appendChild(expBody);
+    } else if (p && t.manual) {
+      var expCollapsed2 = true;
+      var expChevron2 = el("span", { class: "collapsible-chevron" }, "▶");
+      var expHead2 = el("div", { class: "calc-explain-head collapsible-head" }, [expChevron2, "Original calculation (manually adjusted)"]);
+      var expBody2 = el("div", { class: "collapsible-body collapsed" });
+      expBody2.appendChild(buildCalcExplain(t, p));
+      expHead2.addEventListener("click", function () {
+        expCollapsed2 = !expCollapsed2;
+        expChevron2.textContent = expCollapsed2 ? "▶" : "▼";
+        expBody2.classList.toggle("collapsed", expCollapsed2);
+      });
+      card.appendChild(expHead2);
+      card.appendChild(expBody2);
+    }
 
     card.appendChild(el("div", { class: "form-actions" }, [
       el("button", { class: "btn", onclick: function () { openManualAdjust(t); } }, "Adjust manually"),
@@ -419,6 +458,13 @@ window.MM.app = (function () {
       ["Fitness goal", lbl(m.FOCUS, p.focus)]
     ];
     if (p.goal !== "maintain") pairs.splice(6, 0, ["Rate", lbl(m.RATES, p.rate)]);
+    if (p.bodyFatPct) {
+      var lbmKg = p.weightKg * (1 - p.bodyFatPct / 100);
+      var lbmStr = p.units === "metric"
+        ? (Math.round(lbmKg * 10) / 10) + " kg"
+        : Math.round(m.kgToLb(lbmKg)) + " lb";
+      pairs.splice(4, 0, ["Body fat", p.bodyFatPct + "%"], ["Lean mass", lbmStr]);
+    }
 
     var card = el("div", { class: "card" });
     card.appendChild(el("div", { class: "targets-head" }, [
@@ -925,31 +971,42 @@ window.MM.app = (function () {
     ]));
     root.appendChild(scopeCard);
 
-    // presets
-    var presetWrap = el("div", { class: "preset-wrap" });
+    // presets (collapsible, starts open)
+    var qpCollapsed = false;
+    var qpChevron = el("span", { class: "collapsible-chevron" }, "▼");
+    var qpHead = el("div", { class: "section-label collapsible-head" }, [qpChevron, "Quick picks"]);
+    var presetWrap = el("div", { class: "preset-wrap collapsible-body" });
     Object.keys(window.MM.recommend.PRESETS).forEach(function (key) {
       var preset = window.MM.recommend.PRESETS[key];
       presetWrap.appendChild(el("button", {
         class: "preset", onclick: function () { runRecommend(preset.opts); }
       }, preset.label));
     });
-    root.appendChild(el("div", { class: "card" }, [el("div", { class: "section-label" }, "Quick picks"), presetWrap]));
+    qpHead.addEventListener("click", function () {
+      qpCollapsed = !qpCollapsed;
+      qpChevron.textContent = qpCollapsed ? "▶" : "▼";
+      presetWrap.classList.toggle("collapsed", qpCollapsed);
+    });
+    root.appendChild(el("div", { class: "card" }, [qpHead, presetWrap]));
 
-    // custom filters
-    var custom = el("div", { class: "card form-grid" });
-    custom.appendChild(el("div", { class: "section-label span2" }, "Custom search"));
-    custom.appendChild(field("Max calories", numInput("c_maxKcal", "", 0, 3000)));
-    custom.appendChild(field("Min protein (g)", numInput("c_minProtein", "", 0, 200)));
-    custom.appendChild(field("Max sodium (mg)", numInput("c_maxSodium", "", 0, 4000)));
-    custom.appendChild(field("Max sugar (g)", numInput("c_maxSugar", "", 0, 200)));
-    custom.appendChild(field("Meal size", select("c_mealSize", [
+    // custom filters (collapsible, starts collapsed)
+    var csCollapsed = true;
+    var csChevron = el("span", { class: "collapsible-chevron" }, "▶");
+    var csHead = el("div", { class: "section-label collapsible-head" }, [csChevron, "Custom search"]);
+    var custom = el("div", { class: "card" });
+    var csBody = el("div", { class: "form-grid collapsible-body collapsed" });
+    csBody.appendChild(field("Max calories", numInput("c_maxKcal", "", 0, 3000)));
+    csBody.appendChild(field("Min protein (g)", numInput("c_minProtein", "", 0, 200)));
+    csBody.appendChild(field("Max sodium (mg)", numInput("c_maxSodium", "", 0, 4000)));
+    csBody.appendChild(field("Max sugar (g)", numInput("c_maxSugar", "", 0, 200)));
+    csBody.appendChild(field("Meal size", select("c_mealSize", [
       { v: "", label: "Any" }, { v: "snack", label: "Snack" }, { v: "regular", label: "Regular" }, { v: "large", label: "Large" }
     ], "")));
-    custom.appendChild(field("Prioritize", select("c_prioritize", [
+    csBody.appendChild(field("Prioritize", select("c_prioritize", [
       { v: "protein", label: "Protein efficiency" }, { v: "lowcal", label: "Low calorie" },
       { v: "lowcarb", label: "Low carb" }, { v: "lowfat", label: "Low fat" }
     ], "protein")));
-    custom.appendChild(el("div", { class: "span2 form-actions" }, [
+    csBody.appendChild(el("div", { class: "span2 form-actions" }, [
       el("button", { class: "btn primary", onclick: function () {
         runRecommend({
           maxKcal: numOrNull(custom, "c_maxKcal"),
@@ -961,6 +1018,13 @@ window.MM.app = (function () {
         });
       } }, "Find matches")
     ]));
+    csHead.addEventListener("click", function () {
+      csCollapsed = !csCollapsed;
+      csChevron.textContent = csCollapsed ? "▶" : "▼";
+      csBody.classList.toggle("collapsed", csCollapsed);
+    });
+    custom.appendChild(csHead);
+    custom.appendChild(csBody);
     root.appendChild(custom);
 
     var results = el("div", { id: "rec-results", class: "card-list" });
@@ -1124,8 +1188,9 @@ window.MM.app = (function () {
     }
     root.appendChild(logCard);
 
-    // progress: weigh-in + habits
+    // progress: weigh-in + body fat + habits
     root.appendChild(weighInCard());
+    root.appendChild(bodyFatCard());
     root.appendChild(habitsCard());
     var ach = achievementsCard();
     if (ach) root.appendChild(ach);
@@ -1255,6 +1320,158 @@ window.MM.app = (function () {
       "<polyline fill='none' stroke='" + stroke + "' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' points='" + pts.join(" ") + "'/>" +
       "<circle cx='" + lastPt[0] + "' cy='" + lastPt[1] + "' r='3.2' fill='" + stroke + "'/></svg>";
     return el("div", { class: "spark", html: svg });
+  }
+
+  /* ---------- body fat % tracker ----------------------------------------- */
+  function bodyFatCard() {
+    var store = window.MM.store;
+    var prof = store.getProfile();
+    var metric = prof && prof.units === "metric";
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { class: "section-label" }, "Body Fat % · " + prettyDate(state.viewDate)));
+    var existing = store.getBodyFat(state.viewDate);
+    var input = el("input", {
+      class: "input", type: "number", step: "0.1", min: "1", max: "60", placeholder: "e.g. 20",
+      value: existing != null ? String(Math.round(existing * 10) / 10) : null
+    });
+    var form = el("form", { class: "weigh-form" }, [
+      input, el("span", { class: "unit" }, "%"),
+      el("button", { class: "btn primary small", type: "submit" }, existing != null ? "Update" : "Log"),
+      existing != null ? el("button", {
+        class: "btn ghost small", type: "button",
+        onclick: function () { store.setBodyFat(null, state.viewDate); renderTracker(); }
+      }, "Clear") : null
+    ]);
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var v = parseFloat(input.value);
+      if (isNaN(v) || v <= 0 || v >= 100) { ui.toast("Enter a valid body fat % (1–99)", "err"); return; }
+      store.setBodyFat(v, state.viewDate);
+      // Optionally show lean mass alongside if weight is logged for this day
+      var wt = store.getWeight(state.viewDate);
+      var extra = "";
+      if (wt) {
+        var lbm = wt * (1 - v / 100);
+        extra = " · Lean mass " + (metric ? (Math.round(lbm * 10) / 10) + " kg" : Math.round(window.MM.macros.kgToLb(lbm)) + " lb");
+      }
+      ui.toast("Body fat logged for " + prettyDate(state.viewDate) + extra, "ok");
+      renderTracker();
+    });
+    card.appendChild(form);
+    if (existing != null) {
+      var wt2 = store.getWeight(state.viewDate);
+      if (wt2) {
+        var lbm2 = wt2 * (1 - existing / 100);
+        var lbmStr = metric ? (Math.round(lbm2 * 10) / 10) + " kg" : Math.round(window.MM.macros.kgToLb(lbm2)) + " lb";
+        card.appendChild(el("p", { class: "muted small", style: "margin:8px 0 0" },
+          "Lean mass: " + lbmStr + " · Fat mass: " +
+          (metric ? (Math.round((wt2 - lbm2) * 10) / 10) + " kg" : Math.round(window.MM.macros.kgToLb(wt2 - lbm2)) + " lb")));
+      }
+    }
+    var series = store.bodyFatSeries();
+    if (series.length >= 2) card.appendChild(bodyFatTrend(series));
+    else if (series.length === 1) card.appendChild(el("p", { class: "muted small" }, "Log another day to see your body fat trend."));
+    return card;
+  }
+
+  function bodyFatTrend(series) {
+    var first = series[0], last = series[series.length - 1];
+    var net = last.pct - first.pct;
+    var days = Math.max(1, (new Date(last.date + "T00:00:00") - new Date(first.date + "T00:00:00")) / 86400000);
+    var perWeek = net / days * 7;
+    var signed = function (x) { return (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(1); };
+    var prof = window.MM.store.getProfile();
+    var goalDir = prof ? ({ lose: -1, gain: 1, maintain: 0 })[prof.goal] : null;
+    var aligned = goalDir == null ? null
+      : goalDir === 0 ? Math.abs(perWeek) < 0.2
+      : goalDir < 0 ? perWeek < -0.05 : null; // gaining muscle doesn't mean BF should rise
+    var insight = goalDir === null ? Math.abs(perWeek).toFixed(1) + "%/wk change"
+      : goalDir === 0 ? (aligned ? "Body fat holding steady." : "Body fat drifting " + (perWeek > 0 ? "up" : "down") + " " + Math.abs(perWeek).toFixed(1) + "%/wk.")
+      : goalDir < 0 ? (aligned ? "On track — body fat trending down." : "Body fat trending up — check intake vs targets.")
+      : "Body fat " + (perWeek < 0 ? "decreasing while gaining — great recomp signal." : "holding while gaining — expected on a bulk.");
+    return el("div", { class: "weight-trend" }, [
+      sparkline(series.map(function (s) { return s.pct; }), aligned === null ? null : !aligned),
+      el("div", { class: "weight-stats" }, [
+        el("div", null, [
+          el("span", { class: "wt-num" }, signed(net) + "%"),
+          el("span", { class: "muted small" }, " since " + prettyDate(first.date) + " · " + series.length + " readings")
+        ]),
+        el("div", { class: "muted small" + (aligned ? " good" : "") }, insight)
+      ])
+    ]);
+  }
+
+  /* ---------- calculation explanation (used in targets card) -------------- */
+  function buildCalcExplain(t, p) {
+    var m = window.MM.macros;
+    var d = m.explain(p);
+    var fmt = ui.fmt;
+    var wrap = el("div", { class: "calc-explain" });
+
+    function step(num, title, val, lines) {
+      var head = el("div", { class: "calc-step-head" }, [
+        el("span", { class: "calc-step-num" }, num + "."),
+        el("span", { class: "calc-step-title" }, title),
+        val ? el("span", { class: "calc-step-val" }, val) : null
+      ]);
+      var item = el("div", { class: "calc-step" }, [head]);
+      if (lines && lines.length) {
+        var ul = el("ul", { class: "calc-step-lines" });
+        lines.forEach(function (line) { ul.appendChild(el("li", null, line)); });
+        item.appendChild(ul);
+      }
+      return item;
+    }
+
+    // 1. BMR
+    var bmrLines = [];
+    if (d.method === "katch_mcardle") {
+      bmrLines.push("Formula: Katch-McArdle (body fat known — doesn't require height/age)");
+      bmrLines.push("LBM = " + p.weightKg.toFixed(1) + " kg × (1 − " + p.bodyFatPct + "%) = " + d.lbm + " kg");
+      bmrLines.push("370 + (21.6 × " + d.lbm + " kg) = " + fmt(d.bmr) + " cal/day");
+    } else {
+      bmrLines.push("Formula: Mifflin–St Jeor");
+      var sexAdj = p.sex === "female" ? "− 161" : "+ 5";
+      bmrLines.push("(10 × " + p.weightKg.toFixed(1) + ") + (6.25 × " + p.heightCm.toFixed(0) + ") − (5 × " + p.age + ") " + sexAdj + " = " + fmt(d.bmr) + " cal/day");
+    }
+    wrap.appendChild(step(1, "Basal Metabolic Rate (BMR)", fmt(d.bmr) + " cal/day", bmrLines));
+
+    // 2. TDEE
+    wrap.appendChild(step(2, "Total Daily Energy (TDEE)", fmt(d.tdee) + " cal/day", [
+      "Activity: " + d.activityLabel,
+      fmt(d.bmr) + " × " + d.activityMult + " = " + fmt(d.tdee) + " cal/day"
+    ]));
+
+    // 3. Calorie target
+    var calLines = [];
+    if (d.goalDir === 0) {
+      calLines.push("Goal: maintain — target equals TDEE");
+    } else {
+      var sign = d.goalDir < 0 ? "−" : "+";
+      calLines.push("Goal: " + d.goalLabel + " — " + d.rateLabel);
+      calLines.push(fmt(d.tdee) + " " + sign + " " + fmt(d.rateKcal) + " cal = " + fmt(d.kcalRaw) + " cal/day");
+    }
+    if (d.floorApplied) calLines.push("Safety minimum applied: raised to " + d.floorValue + " cal/day");
+    if (t && t.manual) calLines.push("Note: you have manually adjusted these targets from the calculated values");
+    wrap.appendChild(step(3, "Calorie Target", fmt(d.kcal) + " cal/day", calLines));
+
+    // 4. Protein
+    var protLines = [
+      "Focus: " + d.focusLabel,
+      d.proteinPerKg + " g/kg " + d.proteinBasis + " × " + d.proteinKg.toFixed(1) + " kg = " + d.proteinRaw + "g"
+    ];
+    if (d.proteinClamped === "cap") protLines.push("Capped at 35% of calories (max " + d.proteinMaxG + "g) to avoid excess");
+    if (d.proteinClamped === "floor") protLines.push("Raised to 20% minimum (" + d.proteinMinG + "g) for adequate protein");
+    wrap.appendChild(step(4, "Protein", d.protein + "g/day", protLines));
+
+    // 5. Carbs & Fat
+    wrap.appendChild(step(5, "Carbs & Fat", d.carbs + "g carbs · " + d.fat + "g fat", [
+      "Calories remaining after protein: " + fmt(d.remainingKcal) + " cal",
+      "Carbs (" + d.cPct + "%): " + fmt(Math.round(d.remainingKcal * d.cPct / 100)) + " cal ÷ 4 = " + d.carbs + "g",
+      "Fat (" + d.fPct + "%): " + fmt(Math.round(d.remainingKcal * d.fPct / 100)) + " cal ÷ 9 = " + d.fat + "g"
+    ]));
+
+    return wrap;
   }
 
   /* ---------- daily habits (toggles + streaks) ---------------------------- */

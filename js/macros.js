@@ -32,12 +32,13 @@ window.MM.macros = (function () {
 
   // Fitness focus -> carb/fat ratio for non-protein calories, plus protein in g/kg body weight.
   // c and f are only used as a ratio (c : f) to split remaining calories after protein is set.
+  // proteinPerLbmKg is used when the user supplies a body fat % (Katch-McArdle path).
   var FOCUS = {
-    fat_loss:   { label: "Fat loss / cutting",        c: 0.50, f: 0.50, proteinPerKg: 2.2 },
-    muscle:     { label: "Build muscle",              c: 0.65, f: 0.35, proteinPerKg: 1.8 },
-    recomp:     { label: "Body recomposition",        c: 0.55, f: 0.45, proteinPerKg: 2.0 },
-    endurance:  { label: "Endurance / activity",      c: 0.73, f: 0.27, proteinPerKg: 1.4 },
-    general:    { label: "General health",            c: 0.60, f: 0.40, proteinPerKg: 1.4 }
+    fat_loss:   { label: "Fat loss / cutting",        c: 0.50, f: 0.50, proteinPerKg: 2.2, proteinPerLbmKg: 2.5 },
+    muscle:     { label: "Build muscle",              c: 0.65, f: 0.35, proteinPerKg: 1.8, proteinPerLbmKg: 2.0 },
+    recomp:     { label: "Body recomposition",        c: 0.55, f: 0.45, proteinPerKg: 2.0, proteinPerLbmKg: 2.3 },
+    endurance:  { label: "Endurance / activity",      c: 0.73, f: 0.27, proteinPerKg: 1.4, proteinPerLbmKg: 1.6 },
+    general:    { label: "General health",            c: 0.60, f: 0.40, proteinPerKg: 1.4, proteinPerLbmKg: 1.6 }
   };
 
   function lbToKg(lb) { return lb * 0.453592; }
@@ -50,10 +51,19 @@ window.MM.macros = (function () {
   }
 
   /* Compute full target recommendation from a profile object.
-   * profile: { age, sex, heightCm, weightKg, activity, goal, rate, focus }
+   * profile: { age, sex, heightCm, weightKg, activity, goal, rate, focus, bodyFatPct? }
+   * When bodyFatPct is supplied, uses Katch-McArdle BMR (LBM-based) which is more accurate
+   * for body composition goals. Protein is then anchored to lean body mass instead of
+   * total weight, which avoids over-prescribing protein for higher body-fat individuals.
    */
   function compute(profile) {
-    var b = bmr(profile.sex, profile.weightKg, profile.heightCm, profile.age);
+    var lbm = null, b;
+    if (profile.bodyFatPct > 0 && profile.bodyFatPct < 100) {
+      lbm = profile.weightKg * (1 - profile.bodyFatPct / 100);
+      b = 370 + 21.6 * lbm; // Katch-McArdle
+    } else {
+      b = bmr(profile.sex, profile.weightKg, profile.heightCm, profile.age); // Mifflin-St Jeor
+    }
     var mult = (ACTIVITY[profile.activity] || ACTIVITY.moderate).mult;
     var tdee = b * mult;
 
@@ -67,18 +77,16 @@ window.MM.macros = (function () {
 
     var focus = FOCUS[profile.focus] || FOCUS.general;
 
-    // Protein is anchored to body weight (g/kg), not to a % of calories.
-    // Percentage-based protein grows with TDEE and produces 3+ g/kg targets for
-    // normal-weight users at maintenance — far above any evidence-based recommendation.
-    // Floor: 20% of calories so protein stays meaningful on very-low-calorie floors.
-    // Cap: 35% of calories so heavier users don't get absurd absolute targets.
+    // Protein anchored to lean body mass when known, otherwise to total weight.
+    // Floor: 20% of calories. Cap: 35% of calories.
+    var proteinBase = lbm != null ? lbm : profile.weightKg;
+    var pPerKg = lbm != null ? focus.proteinPerLbmKg : focus.proteinPerKg;
     var protein = Math.round(
-      Math.min(Math.max(focus.proteinPerKg * profile.weightKg, kcal * 0.20 / 4), kcal * 0.35 / 4)
+      Math.min(Math.max(pPerKg * proteinBase, kcal * 0.20 / 4), kcal * 0.35 / 4)
     );
 
     var proteinKcal = protein * 4;
     var remaining = Math.max(kcal - proteinKcal, 0);
-    // Split the remaining calories between carbs and fat by their relative ratio.
     var cShare = focus.c / (focus.c + focus.f);
     var carbs = Math.round((remaining * cShare) / 4);
     var fat = Math.round((remaining * (1 - cShare)) / 9);
@@ -94,6 +102,55 @@ window.MM.macros = (function () {
     };
   }
 
+  /* Returns a plain object describing each step of the calculation for a given
+   * profile — used by the Profile tab's "How was this calculated?" panel. */
+  function explain(profile) {
+    var lbm = null, b, method;
+    if (profile.bodyFatPct > 0 && profile.bodyFatPct < 100) {
+      lbm = Math.round(profile.weightKg * (1 - profile.bodyFatPct / 100) * 10) / 10;
+      b = 370 + 21.6 * lbm;
+      method = "katch_mcardle";
+    } else {
+      b = bmr(profile.sex, profile.weightKg, profile.heightCm, profile.age);
+      method = "mifflin";
+    }
+    var bRound = Math.round(b);
+    var act = ACTIVITY[profile.activity] || ACTIVITY.moderate;
+    var tdee = Math.round(b * act.mult);
+    var goal = GOALS[profile.goal] || GOALS.maintain;
+    var rateObj = RATES[profile.rate] || RATES["0.5"];
+    var rateKcal = goal.dir === 0 ? 0 : rateObj.kcal;
+    var kcalRaw = Math.round(tdee + goal.dir * rateKcal);
+    var floor = profile.sex === "female" ? 1200 : 1500;
+    var kcal = Math.max(kcalRaw, floor);
+    var focus = FOCUS[profile.focus] || FOCUS.general;
+    var proteinKg = lbm != null ? lbm : profile.weightKg;
+    var pPerKg = lbm != null ? focus.proteinPerLbmKg : focus.proteinPerKg;
+    var pRaw = pPerKg * proteinKg;
+    var pMin = kcal * 0.20 / 4;
+    var pMax = kcal * 0.35 / 4;
+    var protein = Math.round(Math.min(Math.max(pRaw, pMin), pMax));
+    var clamped = pRaw < pMin ? "floor" : (pRaw > pMax ? "cap" : null);
+    var remKcal = Math.max(kcal - protein * 4, 0);
+    var cShare = focus.c / (focus.c + focus.f);
+    var cPct = Math.round(cShare * 100);
+    return {
+      method: method, lbm: lbm, bmr: bRound,
+      activityMult: act.mult, activityLabel: act.label,
+      tdee: tdee, goalLabel: goal.label, goalDir: goal.dir,
+      rateLabel: rateObj.label, rateKcal: rateKcal,
+      kcalRaw: kcalRaw, kcal: kcal, floorApplied: kcalRaw < floor, floorValue: floor,
+      proteinBasis: lbm != null ? "LBM" : "body weight",
+      proteinPerKg: pPerKg, proteinKg: proteinKg,
+      proteinRaw: Math.round(pRaw), protein: protein,
+      proteinClamped: clamped, proteinMinG: Math.round(pMin), proteinMaxG: Math.round(pMax),
+      remainingKcal: remKcal, cPct: cPct, fPct: 100 - cPct,
+      carbs: Math.round((remKcal * cShare) / 4),
+      fat: Math.round((remKcal * (1 - cShare)) / 9),
+      focusLabel: focus.label
+    };
+  }
+
   return {
     ACTIVITY: ACTIVITY,
     GOALS: GOALS,
@@ -104,6 +161,7 @@ window.MM.macros = (function () {
     kgToLb: function (kg) { return kg / 0.453592; },
     cmToIn: function (cm) { return cm / 2.54; },
     bmr: bmr,
-    compute: compute
+    compute: compute,
+    explain: explain
   };
 })();
