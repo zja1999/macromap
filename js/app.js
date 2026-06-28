@@ -27,10 +27,13 @@ window.MM.app = (function () {
     if (typeof def === "boolean") return v === "true";
     return v;
   }
+  function lsGetJSON(key, def) {
+    try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch(e) { return def; }
+  }
   var filters = {
     recMode:    lsGet("mm_rec_mode",           true),
     category:   lsGet("mm_filter_category",    ""),
-    chainId:    lsGet("mm_filter_chain",       ""),
+    chainIds:   lsGetJSON("mm_filter_chains",  []),
     search:     lsGet("mm_filter_search",      ""),
     sort:       lsGet("mm_filter_sort",        "ppc"),
     favorites:  lsGet("mm_filter_favorites",   false),
@@ -38,6 +41,7 @@ window.MM.app = (function () {
     combosOpen: lsGet("mm_combos_open",        false)
   };
   function saveFilter(key, value) { localStorage.setItem(key, String(value)); }
+  function saveChainIds() { localStorage.setItem("mm_filter_chains", JSON.stringify(filters.chainIds)); }
 
   // Set to an error string if loadNutrition() fails; null while loading or after success.
   var nutritionError = null;
@@ -199,8 +203,8 @@ window.MM.app = (function () {
     });
     // Sync Discover → Browse chain selection into persisted filter state.
     if (view === "menu" && state.selectedChainId) {
-      filters.chainId = state.selectedChainId;
-      saveFilter("mm_filter_chain", filters.chainId);
+      filters.chainIds = [state.selectedChainId];
+      saveChainIds();
       state.selectedChainId = null;
     }
     // per-view refresh on show
@@ -779,12 +783,6 @@ window.MM.app = (function () {
     var tg = window.MM.store.getTargets();
     var rem = remaining();
 
-    // In browse mode, always need a selected chain — seed to first available.
-    // In rec mode, empty chainId means "All chains", so don't seed.
-    if (!filters.recMode && !filters.chainId && chains.length) {
-      filters.chainId = nearbyIds[0] || chains[0].id;
-      saveFilter("mm_filter_chain", filters.chainId);
-    }
 
     root.appendChild(header("Browse",
       filters.recMode
@@ -835,42 +833,67 @@ window.MM.app = (function () {
   function buildSharedFilters(chains) {
     var wrap = el("div", { class: "card shared-filters" });
 
-    // Category chips — derived dynamically from all items
-    var catSeen = {};
-    var allCats = [];
-    (window.MM.allItems ? window.MM.allItems() : []).forEach(function (it) {
-      if (it.category && !catSeen[it.category]) { catSeen[it.category] = true; allCats.push(it.category); }
+    // ── 1. Chain multi-select ─────────────────────────────────────────────
+    var chainChips = el("div", { class: "filter-chips" });
+    chains.forEach(function (c) {
+      var on = filters.chainIds.indexOf(c.id) !== -1;
+      chainChips.appendChild(el("button", {
+        class: "chip" + (on ? " active" : ""),
+        onclick: function () {
+          var idx = filters.chainIds.indexOf(c.id);
+          if (idx === -1) filters.chainIds.push(c.id);
+          else filters.chainIds.splice(idx, 1);
+          // Changing chains may invalidate the current category; reset if needed
+          var validCats = getCatsForChains(filters.chainIds, chains);
+          if (filters.category && validCats.indexOf(filters.category) === -1) {
+            filters.category = "";
+            saveFilter("mm_filter_category", "");
+          }
+          saveChainIds();
+          renderMenu();
+        }
+      }, c.name));
     });
-    allCats.sort();
+    wrap.appendChild(el("div", { class: "filter-group" }, [
+      el("div", { class: "filter-group-label" }, "Restaurants" + (filters.chainIds.length ? "" : " (all)")),
+      chainChips
+    ]));
 
-    var chipsRow = el("div", { class: "filter-chips" });
-    chipsRow.appendChild(el("button", {
-      class: "chip" + (!filters.category ? " active" : ""),
-      onclick: function () { filters.category = ""; saveFilter("mm_filter_category", ""); renderMenu(); }
-    }, "All"));
-    allCats.forEach(function (cat) {
-      chipsRow.appendChild(el("button", {
-        class: "chip" + (filters.category === cat ? " active" : ""),
-        onclick: function () { filters.category = cat; saveFilter("mm_filter_category", cat); renderMenu(); }
-      }, cat));
+    // ── 2. Category dropdown ─────────────────────────────────────────────
+    var availCats = getCatsForChains(filters.chainIds, chains);
+    // If the persisted category is no longer valid for selected chains, clear it
+    if (filters.category && availCats.indexOf(filters.category) === -1) {
+      filters.category = "";
+      saveFilter("mm_filter_category", "");
+    }
+    var catOptions = [{ v: "", label: "All categories" }].concat(
+      availCats.map(function (c) { return { v: c, label: c }; })
+    );
+    var catSel = select("category", catOptions, filters.category, function (e) {
+      filters.category = e.target.value;
+      saveFilter("mm_filter_category", filters.category);
+      renderMenu();
     });
-    wrap.appendChild(chipsRow);
+    wrap.appendChild(el("div", { class: "filter-group" }, [
+      el("div", { class: "filter-group-label" }, "Category"),
+      catSel
+    ]));
 
-    // Favorites chip
+    // ── 3. Favorites chip ────────────────────────────────────────────────
     wrap.appendChild(el("button", {
       class: "chip fav-chip" + (filters.favorites ? " active" : ""),
       onclick: function () { filters.favorites = !filters.favorites; saveFilter("mm_filter_favorites", filters.favorites); renderMenu(); }
     }, "⭐ Favorites only"));
 
-    // Active filter bar
+    // ── 4. Active filter bar ─────────────────────────────────────────────
     var activeLabels = [];
+    if (filters.chainIds.length) activeLabels = activeLabels.concat(
+      filters.chainIds.map(function (id) {
+        var c = chains.find(function (ch) { return ch.id === id; });
+        return c ? c.name : id;
+      })
+    );
     if (filters.category) activeLabels.push(filters.category);
-    // Chain is always required in browse mode (selector is visible), so only
-    // show it as a filter label in rec mode where "All" is the default.
-    if (filters.recMode && filters.chainId) {
-      var fc = window.MM.getChainById(filters.chainId);
-      if (fc) activeLabels.push(fc.name);
-    }
     if (filters.favorites) activeLabels.push("⭐");
     if (!filters.recMode && filters.search) activeLabels.push('"' + filters.search + '"');
     if (!filters.recMode && filters.fit) activeLabels.push("Fit only");
@@ -885,9 +908,25 @@ window.MM.app = (function () {
     return wrap;
   }
 
+  // Categories present in the items of the given chainIds (or all chains if empty).
+  function getCatsForChains(chainIds, chains) {
+    var pool = chainIds.length
+      ? chains.filter(function (c) { return chainIds.indexOf(c.id) !== -1; })
+      : chains;
+    var seen = {}, cats = [];
+    pool.forEach(function (c) {
+      (c.items || []).forEach(function (it) {
+        if (it.category && !seen[it.category]) { seen[it.category] = true; cats.push(it.category); }
+      });
+    });
+    cats.sort();
+    return cats;
+  }
+
   function clearAllFilters() {
-    filters.category = ""; filters.search = ""; filters.favorites = false; filters.fit = false;
-    // Keep chainId and recMode — those are intent, not filters
+    filters.chainIds = []; filters.category = ""; filters.search = "";
+    filters.favorites = false; filters.fit = false;
+    localStorage.setItem("mm_filter_chains", "[]");
     ["mm_filter_category", "mm_filter_search"].forEach(function (k) { localStorage.setItem(k, ""); });
     localStorage.setItem("mm_filter_favorites", "false");
     localStorage.setItem("mm_filter_fit", "false");
@@ -895,6 +934,11 @@ window.MM.app = (function () {
   }
 
   function applySharedItemFilters(items) {
+    if (filters.chainIds && filters.chainIds.length) {
+      var chainSet = {};
+      filters.chainIds.forEach(function (id) { chainSet[id] = true; });
+      items = items.filter(function (it) { return chainSet[it.chainId]; });
+    }
     if (filters.category) items = items.filter(function (it) { return it.category === filters.category; });
     if (filters.favorites) {
       var favMap = {};
@@ -906,16 +950,6 @@ window.MM.app = (function () {
 
   function renderBrowseModeContent(root, chains, nearbyIds, rem) {
     var controls = el("div", { class: "card menu-controls" });
-
-    var chainSel = select("chain", chains.map(function (c) {
-      var near = nearbyIds.indexOf(c.id) !== -1;
-      return { v: c.id, label: c.name + (near ? "  ·  nearby" : "") };
-    }), filters.chainId, function (e) {
-      filters.chainId = e.target.value;
-      saveFilter("mm_filter_chain", filters.chainId);
-      renderMenu();
-    });
-    controls.appendChild(field("Restaurant", chainSel));
 
     var searchInput = el("input", { class: "input", id: "menu-search", placeholder: "Search items…", type: "text",
       value: filters.search || "" });
@@ -945,17 +979,23 @@ window.MM.app = (function () {
     root.appendChild(compareBar);
 
     function draw() {
-      var chain = window.MM.getChainById(filters.chainId);
-      if (!chain) { listWrap.appendChild(emptyHint("Select a restaurant.")); return; }
       var savedY2 = window.scrollY;
       ui.clear(listWrap);
       var q = searchInput.value.trim().toLowerCase();
       var sort = sortSel.value;
       var fit = fitOnly.checked && rem;
 
-      var items = chain.items.map(function (it) {
-        return Object.assign({ chainId: chain.id, chainName: chain.name, chainColor: chain.color }, it);
+      // Build item pool from selected chains (or all if none selected)
+      var activeChains = filters.chainIds.length
+        ? chains.filter(function (c) { return filters.chainIds.indexOf(c.id) !== -1; })
+        : chains;
+      var items = [];
+      activeChains.forEach(function (chain) {
+        chain.items.forEach(function (it) {
+          items.push(Object.assign({ chainId: chain.id, chainName: chain.name, chainColor: chain.color }, it));
+        });
       });
+
       items = applySharedItemFilters(items);
       if (q) items = items.filter(function (it) {
         return it.name.toLowerCase().indexOf(q) !== -1 || (it.category || "").toLowerCase().indexOf(q) !== -1;
@@ -971,8 +1011,10 @@ window.MM.app = (function () {
 
       if (!items.length) { listWrap.appendChild(browseEmptyState()); window.scrollTo(0, savedY2); return; }
 
-      var chainCfg = window.MM.getChainConfig(chain);
-      if (chainCfg.interaction_type === "plate_builder") {
+      // Show plate builder only when exactly one chain with that type is selected
+      var chain = filters.chainIds.length === 1 ? window.MM.getChainById(filters.chainIds[0]) : null;
+      var chainCfg = chain && window.MM.getChainConfig(chain);
+      if (chainCfg && chainCfg.interaction_type === "plate_builder") {
         var pbRoles = chainCfg.category_roles || {};
         var pbRoleKeys = Object.keys(pbRoles);
         var hasAnyRoleItems = pbRoleKeys.length === 0
@@ -1026,25 +1068,15 @@ window.MM.app = (function () {
       return;
     }
 
-    // Chain selector (optional; hides scope radio when set)
+    // Scope radio — only relevant when no specific chains are selected
     var recCtrlCard = el("div", { class: "card" });
-    var chainOptions = [{ v: "", label: "All chains" }].concat(chains.map(function (c) {
-      var near = nearbyIds.indexOf(c.id) !== -1;
-      return { v: c.id, label: c.name + (near ? " · nearby" : "") };
-    }));
-    var recChainSel = select("rec_chain", chainOptions, filters.chainId || "", function (e) {
-      filters.chainId = e.target.value;
-      saveFilter("mm_filter_chain", filters.chainId);
-      renderMenu();
-    });
-    recCtrlCard.appendChild(field("Chain (optional)", recChainSel));
-
+    var hasChainFilter = filters.chainIds && filters.chainIds.length > 0;
     var scopeNear = el("input", { type: "radio", name: "scope", value: "near",
-      checked: (!filters.chainId && nearbyIds.length) ? "checked" : null,
+      checked: (!hasChainFilter && nearbyIds.length) ? "checked" : null,
       disabled: nearbyIds.length ? null : "disabled" });
     var scopeAll = el("input", { type: "radio", name: "scope", value: "all",
-      checked: (!filters.chainId || !nearbyIds.length) ? "checked" : null });
-    var scopeRow = el("div", { class: "scope-row" + (filters.chainId ? " hidden" : "") }, [
+      checked: (!hasChainFilter || !nearbyIds.length) ? "checked" : null });
+    var scopeRow = el("div", { class: "scope-row" + (hasChainFilter ? " hidden" : "") }, [
       el("label", { class: "check tiny" }, [scopeNear,
         el("span", null, "Only chains near me" + (nearbyIds.length ? " (" + nearbyIds.length + ")" : " — search Discover first"))]),
       el("label", { class: "check tiny" }, [scopeAll, el("span", null, "All chains in database")])
@@ -1114,7 +1146,7 @@ window.MM.app = (function () {
     runRecommend(window.MM.recommend.PRESETS.fits_remaining.opts);
 
     function getChainIds() {
-      if (filters.chainId) return [filters.chainId];
+      if (filters.chainIds && filters.chainIds.length) return filters.chainIds;
       var scopeEl = root.querySelector('input[name="scope"]:checked');
       if (scopeEl && scopeEl.value === "near") return nearbyIds;
       return null;
@@ -1126,8 +1158,9 @@ window.MM.app = (function () {
       var ranked = window.MM.recommend.rank(rem2, opts, ids, 50);
       ranked = applySharedItemFilters(ranked).slice(0, 15);
       ui.clear(results);
-      var scopeChain = filters.chainId ? window.MM.getChainById(filters.chainId) : null;
-      var scopeLabel = scopeChain ? scopeChain.name : (ids ? "chains near you" : "all chains");
+      var scopeLabel = ids && ids.length === 1
+        ? (window.MM.getChainById(ids[0]) || {}).name || "1 chain"
+        : ids ? (ids.length + " chains") : "all chains";
       results.appendChild(el("div", { class: "list-head" }, [
         el("strong", null, "Top matches"),
         el("span", { class: "muted small" }, "from " + scopeLabel)
@@ -1153,7 +1186,8 @@ window.MM.app = (function () {
         body.appendChild(emptyHint("Log some food today to see combos based on your remaining macros."));
         return;
       }
-      var combos = window.MM.recommend.suggestCombos(rem, filters.chainId || null, filters.category || null, 5);
+      var comboChainFilter = (filters.chainIds && filters.chainIds.length === 1) ? filters.chainIds[0] : null;
+      var combos = window.MM.recommend.suggestCombos(rem, comboChainFilter, filters.category || null, 5);
       if (!combos.length) {
         body.appendChild(emptyHint("No combos found within your remaining budget. Try clearing chain or category filters."));
         return;
