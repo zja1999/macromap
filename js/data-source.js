@@ -24,7 +24,8 @@ window.MM.data = (function () {
       byId[c.id] = {
         id: c.id, name: c.name, color: c.color, match: c.match || [], items: [],
         interaction_type: c.interaction_type || null,
-        plate_sizes: c.plate_sizes || null
+        plate_sizes: c.plate_sizes || null,
+        plate_config: c.plate_config || null
       };
     });
     items.forEach(function (it) {
