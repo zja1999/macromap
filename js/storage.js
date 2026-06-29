@@ -73,9 +73,13 @@ window.MM.store = (function () {
   }
 
   // Persist a local change and notify listeners (e.g. the cloud sync engine).
+  // Writes are debounced so rapid changes (e.g. qty +/– clicks) don't thrash
+  // localStorage. Notifications fire immediately so the UI stays in sync.
+  var _persistTimer = null;
   function persist() {
-    writeLocal();
     notify(false);
+    clearTimeout(_persistTimer);
+    _persistTimer = setTimeout(writeLocal, 300);
   }
 
   function notify(fromSync) {
@@ -301,6 +305,15 @@ window.MM.store = (function () {
     removeFavorite: function (id) {
       state.favorites = state.favorites.filter(function (f) { return f.id !== id; });
       persist();
+    },
+    // Build a Set of "name::chainId" keys for O(1) bulk lookups (e.g. per-card
+    // star checks during a page render). Build once per render pass.
+    getFavoriteSet: function () {
+      var s = new Set();
+      state.favorites.forEach(function (f) {
+        s.add((f.name || "").trim().toLowerCase() + "::" + (f.chainId || ""));
+      });
+      return s;
     },
     // True when a name+chain pair is already pinned (so the UI knows to draw a
     // filled star). chainId may be null for custom favorites.

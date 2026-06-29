@@ -46,9 +46,13 @@ window.MM.recommend = (function () {
     // 2) Fit within remaining calories for the day.
     if (remaining && remaining.kcal > 0) {
       if (item.kcal <= remaining.kcal) {
-        // Reward items that use a healthy share of the remaining budget.
+        // When >60% of the day's budget remains (early day), target ~33% of
+        // remaining per meal so single-serving items beat bulk platters.
+        // Late day (<40% left): keep 55% to favor heavier protein hits.
         var useFrac = item.kcal / remaining.kcal;
-        var calScore = (1 - Math.abs(useFrac - 0.55)) * 25;
+        var earlyDay = !opts.dayBudget || remaining.kcal / opts.dayBudget > 0.60;
+        var sweetSpot = earlyDay ? 0.33 : 0.55;
+        var calScore = (1 - Math.abs(useFrac - sweetSpot)) * 25;
         score += Math.max(calScore, 0);
         reasons.push("Fits remaining calories");
       } else {
@@ -61,8 +65,14 @@ window.MM.recommend = (function () {
 
     // 3) Help close the remaining protein gap.
     if (remaining && remaining.protein > 0) {
-      var covers = Math.min(item.protein / remaining.protein, 1);
-      score += covers * 20;
+      var covers = item.protein / remaining.protein;
+      if (covers <= 1.5) {
+        score += Math.min(covers, 1) * 20;
+      } else {
+        // Gently penalize extreme overshoot (e.g. 30-piece nuggets when only
+        // 40g protein remains) — the item wastes more protein than needed.
+        score += 20 - Math.min((covers - 1.5) * 6, 8);
+      }
       if (covers >= 0.4) reasons.push("Covers a big chunk of protein left");
     }
 
@@ -93,7 +103,24 @@ window.MM.recommend = (function () {
 
   /* Rank items. Returns array of { ...item, _score, _reasons, _ppc } sorted desc. */
   function rank(remaining, opts, availableChainIds, limit) {
+    opts = opts || {};
     var candidates = pool(availableChainIds);
+
+    // Cheap pre-filters — eliminate items before the scoring math runs.
+    if (opts.categoryGroup && window.MM.getCategoryGroup) {
+      candidates = candidates.filter(function (it) {
+        return window.MM.getCategoryGroup(it.category) === opts.categoryGroup;
+      });
+    }
+    if (opts.maxKcal)    candidates = candidates.filter(function (it) { return it.kcal <= opts.maxKcal; });
+    if (opts.minProtein) candidates = candidates.filter(function (it) { return it.protein >= opts.minProtein; });
+
+    var uniqueChainCount = (function () {
+      var s = {};
+      candidates.forEach(function (it) { s[it.chainId] = true; });
+      return Object.keys(s).length;
+    })();
+
     var scored = [];
     candidates.forEach(function (item) {
       var r = scoreItem(item, remaining, opts);
@@ -105,6 +132,16 @@ window.MM.recommend = (function () {
       }));
     });
     scored.sort(function (a, b) { return b._score - a._score; });
+
+    // Enforce per-chain variety when multiple chains are present.
+    if (opts.chainVariety && uniqueChainCount > 1) {
+      var chainCounts = {};
+      scored = scored.filter(function (it) {
+        chainCounts[it.chainId] = (chainCounts[it.chainId] || 0) + 1;
+        return chainCounts[it.chainId] <= opts.chainVariety;
+      });
+    }
+
     return limit ? scored.slice(0, limit) : scored;
   }
 

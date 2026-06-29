@@ -31,36 +31,9 @@ window.MM.app = (function () {
     try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch(e) { return def; }
   }
 
-  var CATEGORY_GROUPS = {
-    "Breakfast": ["Breakfast", "Bagels"],
-    "Entrees":   ["Entrees", "Burgers", "Chicken", "Chicken Breast", "Chicken Dippers",
-                  "Sandwiches", "Wraps", "Wraps & Tacos", "Bap", "Ciabatta", "Focaccia",
-                  "Toasties/ Croques", "Beef", "Seafood", "Wings", "Wings - Per Wing"],
-    "Salads":    ["Salads"],
-    "Sides":     ["Sides", "Beans", "Greens", "Rice", "Salsas", "Tortillas", "Vegetables"],
-    "Soups":     ["Soup", "Soups"],
-    "Snacks":    ["Appetizers", "Grab N Go", "Impulse Items", "Value",
-                  "Add-ons", "Modifiers", "Toppings", "Breads"],
-    "Desserts":  ["Desserts", "Desserts & Snacks", "Cookies", "Sweets",
-                  "Loaf Cakes", "Muffins & Donuts", "Bar cakes", "Bakery", "Treats"],
-    "Drinks":    ["Beverages", "Drinks", "Cold Coffee", "Espresso Drinks", "Frappuccino",
-                  "Hot Chocolates", "Hot Teas", "Tea Latte", "Protein Beverages",
-                  "Refreshments", "Promo Beverages", "Promo Beverages Alt Coffees",
-                  "Bottled Beverages", "Blonde and Decaf Cold Coffee",
-                  "Blonde and Decaf Espresso Drinks", "Blonde and Decaf Frappuccino"]
-  };
-  // Build a reverse lookup: raw category → group name
-  var _catGroupCache = null;
-  function _buildCatGroupCache() {
-    if (_catGroupCache) return _catGroupCache;
-    _catGroupCache = {};
-    Object.keys(CATEGORY_GROUPS).forEach(function (g) {
-      CATEGORY_GROUPS[g].forEach(function (c) { _catGroupCache[c] = g; });
-    });
-    return _catGroupCache;
-  }
+  // Delegate to nutrition-data.js which owns the category mapping.
   function getCategoryGroup(rawCat) {
-    return _buildCatGroupCache()[rawCat] || "Other";
+    return window.MM.getCategoryGroup ? window.MM.getCategoryGroup(rawCat) : "Other";
   }
   var filters = {
     recMode:    lsGet("mm_rec_mode",           false),
@@ -131,11 +104,18 @@ window.MM.app = (function () {
     return true;
   }
 
+  // Favorites Set built once per render pass — avoids O(n) linear scan per card.
+  var _renderFavSet = null;
+  function refreshFavSet() { _renderFavSet = window.MM.store.getFavoriteSet(); }
+
   // Reusable star button — clicking it toggles favorite state and re-renders
   // the host. Caller passes a `rerender` callback so the icon reflects the new
   // state without a full view rebuild when possible.
   function starButton(item, rerender) {
-    var on = window.MM.store.isFavorited(item.name, item.chainId || (item.chain && item.chain.id) || null);
+    var chainId = item.chainId || (item.chain && item.chain.id) || null;
+    var on = _renderFavSet
+      ? _renderFavSet.has((item.name || "").trim().toLowerCase() + "::" + (chainId || ""))
+      : window.MM.store.isFavorited(item.name, chainId);
     var btn = el("button", {
       class: "star-btn" + (on ? " on" : ""),
       title: on ? "Remove from favorites" : "Add to favorites",
@@ -1047,6 +1027,7 @@ window.MM.app = (function () {
     root.appendChild(compareBar);
 
     function draw() {
+      refreshFavSet();
       var savedY2 = window.scrollY;
       ui.clear(listWrap);
       var opts = activeOpts || {};
@@ -1160,13 +1141,15 @@ window.MM.app = (function () {
     }
 
     function runRecommend(opts) {
+      refreshFavSet();
       var ids = getChainIds();
       var rem2 = remaining();
-      // When a category filter is active, rank the full pool first so the
-      // top-N limit doesn't prune low-scoring categories (e.g. Soups) before
-      // the category filter runs. Without a category filter, cap at 200 for speed.
-      var rankLimit = filters.category ? null : 200;
-      var ranked = window.MM.recommend.rank(rem2, opts, ids, rankLimit);
+      opts = Object.assign({}, opts);           // never mutate preset objects
+      if (!opts.maxKcal) opts.maxKcal = 1000;  // default cap: block bulk items
+      opts.dayBudget = tg ? tg.kcal : null;    // context-aware calorie-fit sweet spot
+      opts.categoryGroup = filters.category || null;                // pre-filter in rank()
+      opts.chainVariety = (ids && ids.length === 1) ? null : 3;    // variety off for single chain
+      var ranked = window.MM.recommend.rank(rem2, opts, ids, null);
       ranked = applySharedItemFilters(ranked).slice(0, 15);
       ui.clear(results);
       var scopeLabel = ids && ids.length === 1
@@ -1455,6 +1438,7 @@ window.MM.app = (function () {
     var root = document.getElementById("view-tracker");
     var savedY = window.scrollY;
     ui.clear(root);
+    refreshFavSet();
 
     var tg = window.MM.store.getTargets();
     var entries = window.MM.store.getLog(state.viewDate);

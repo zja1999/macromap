@@ -81,6 +81,7 @@ window.MM.data = (function () {
         throw new Error("Chains exist but have no menu items. Upload items from the Admin tab.");
       }
       window.MM.NUTRITION = assembled;
+      if (window.MM.invalidateItemsCache) window.MM.invalidateItemsCache();
       if (onUpdate) onUpdate(assembled);
       return true;
     }).catch(function (e) {

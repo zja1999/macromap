@@ -11,6 +11,39 @@ window.MM = window.MM || {};
 
 window.MM.NUTRITION = [];
 
+/* Map raw DB category strings to display groups used in filters.
+ * Shared between recommend.js (pre-filter in rank()) and app.js (filter UI). */
+var _CATEGORY_GROUPS = {
+  "Breakfast": ["Breakfast", "Bagels"],
+  "Entrees":   ["Entrees", "Burgers", "Chicken", "Chicken Breast", "Chicken Dippers",
+                "Sandwiches", "Wraps", "Wraps & Tacos", "Bap", "Ciabatta", "Focaccia",
+                "Toasties/ Croques", "Beef", "Seafood", "Wings", "Wings - Per Wing"],
+  "Salads":    ["Salads"],
+  "Sides":     ["Sides", "Beans", "Greens", "Rice", "Salsas", "Tortillas", "Vegetables"],
+  "Soups":     ["Soup", "Soups"],
+  "Snacks":    ["Appetizers", "Grab N Go", "Impulse Items", "Value",
+                "Add-ons", "Modifiers", "Toppings", "Breads"],
+  "Desserts":  ["Desserts", "Desserts & Snacks", "Cookies", "Sweets",
+                "Loaf Cakes", "Muffins & Donuts", "Bar cakes", "Bakery", "Treats"],
+  "Drinks":    ["Beverages", "Drinks", "Cold Coffee", "Espresso Drinks", "Frappuccino",
+                "Hot Chocolates", "Hot Teas", "Tea Latte", "Protein Beverages",
+                "Refreshments", "Promo Beverages", "Promo Beverages Alt Coffees",
+                "Bottled Beverages", "Blonde and Decaf Cold Coffee",
+                "Blonde and Decaf Espresso Drinks", "Blonde and Decaf Frappuccino"]
+};
+var _catGroupReverse = null;
+function _buildCatGroupReverse() {
+  if (_catGroupReverse) return _catGroupReverse;
+  _catGroupReverse = {};
+  Object.keys(_CATEGORY_GROUPS).forEach(function (g) {
+    _CATEGORY_GROUPS[g].forEach(function (c) { _catGroupReverse[c] = g; });
+  });
+  return _catGroupReverse;
+}
+window.MM.getCategoryGroup = function (rawCat) {
+  return _buildCatGroupReverse()[rawCat] || "Other";
+};
+
 /* Return a single chain object by its id string, or null. */
 window.MM.getChainById = function (id) {
   return window.MM.NUTRITION.find(function (c) { return c.id === id; }) || null;
@@ -29,13 +62,17 @@ window.MM.matchChain = function (rawName) {
   return null;
 };
 
-/* Flatten every item with a reference to its chain — handy for search & ranking. */
+/* Flatten every item with a reference to its chain — handy for search & ranking.
+ * Result is cached; call invalidateItemsCache() when NUTRITION is replaced. */
+var _allItemsCache = null;
 window.MM.allItems = function () {
+  if (_allItemsCache) return _allItemsCache;
   var out = [];
   window.MM.NUTRITION.forEach(function (chain) {
     chain.items.forEach(function (item) {
       out.push(Object.assign({ chainId: chain.id, chainName: chain.name, chainColor: chain.color }, item));
     });
   });
-  return out;
+  return (_allItemsCache = out);
 };
+window.MM.invalidateItemsCache = function () { _allItemsCache = null; };
