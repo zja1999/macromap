@@ -32,7 +32,7 @@ window.MM.data = (function () {
       var c = byId[it.chain_id];
       if (!c) return;
       c.items.push({
-        name: it.name, category: it.category,
+        name: it.name, category: it.category, category_group: it.category_group || null,
         kcal: +it.kcal, protein: +it.protein, carbs: +it.carbs, fat: +it.fat,
         sodium: +it.sodium, fiber: +it.fiber, sugar: +it.sugar,
         serving_label: it.serving_label || null,
@@ -229,6 +229,34 @@ window.MM.data = (function () {
   var REQUIRED_COLS = ["chain_id", "chain_name", "name", "kcal", "protein", "carbs", "fat", "sodium", "fiber", "sugar"];
   var NUMERIC_COLS = ["kcal", "protein", "carbs", "fat", "sodium", "fiber", "sugar"];
   var OPTIONAL_INT_COLS = ["default_qty", "max_qty"];
+  var CATEGORY_GROUPS = {
+    "Breakfast": ["Breakfast", "Bagels"],
+    "Entrees":   ["Entrees", "Burgers", "Chicken", "Chicken Breast", "Chicken Dippers",
+                  "Sandwiches", "Wraps", "Wraps & Tacos", "Bap", "Ciabatta", "Focaccia",
+                  "Toasties/ Croques", "Beef", "Seafood", "Wings", "Wings - Per Wing"],
+    "Salads":    ["Salads"],
+    "Sides":     ["Sides", "Beans", "Greens", "Rice", "Salsas", "Tortillas", "Vegetables"],
+    "Soups":     ["Soup", "Soups"],
+    "Snacks":    ["Appetizers", "Grab N Go", "Impulse Items", "Value",
+                  "Add-ons", "Modifiers", "Toppings", "Breads"],
+    "Desserts":  ["Desserts", "Desserts & Snacks", "Cookies", "Sweets",
+                  "Loaf Cakes", "Muffins & Donuts", "Bar cakes", "Bakery", "Treats"],
+    "Drinks":    ["Beverages", "Drinks", "Cold Coffee", "Espresso Drinks", "Frappuccino",
+                  "Hot Chocolates", "Hot Teas", "Tea Latte", "Protein Beverages",
+                  "Refreshments", "Promo Beverages", "Promo Beverages Alt Coffees",
+                  "Bottled Beverages", "Blonde and Decaf Cold Coffee",
+                  "Blonde and Decaf Espresso Drinks", "Blonde and Decaf Frappuccino"]
+  };
+  var _catGroupReverse = (function () {
+    var m = {};
+    Object.keys(CATEGORY_GROUPS).forEach(function (g) {
+      CATEGORY_GROUPS[g].forEach(function (c) { m[c] = g; });
+    });
+    return m;
+  })();
+  function resolveCategoryGroup(rawCat) {
+    return rawCat ? (_catGroupReverse[rawCat] || "Other") : null;
+  }
 
   function uploadSlug(t) {
     var s = String(t == null ? "" : t).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -317,7 +345,8 @@ window.MM.data = (function () {
         if (raw !== "") { var v = parseInt(raw, 10); if (!isNaN(v)) optInts[col] = v; }
       });
       var servingLabel = String(row.serving_label == null ? "" : row.serving_label).trim() || null;
-      items.push(Object.assign({ id: id, chain_id: cid, name: name, category: String(row.category == null ? "" : row.category).trim() || null, serving_label: servingLabel }, nums, optInts));
+      var cat = String(row.category == null ? "" : row.category).trim() || null;
+      items.push(Object.assign({ id: id, chain_id: cid, name: name, category: cat, category_group: resolveCategoryGroup(cat), serving_label: servingLabel }, nums, optInts));
     });
     return { errors: errors, chains: chains, items: items, dupesInFile: dupes };
   }

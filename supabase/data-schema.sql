@@ -24,8 +24,9 @@ create table if not exists public.menu_items (
   id         text primary key,                 -- deterministic: "<chain_id>:<slug(name)>"
   chain_id   text not null references public.chains (id) on delete cascade,
   name       text not null,
-  category   text,
-  kcal       numeric,
+  category       text,
+  category_group text,
+  kcal           numeric,
   protein    numeric,
   carbs      numeric,
   fat        numeric,
@@ -34,7 +35,8 @@ create table if not exists public.menu_items (
   sugar      numeric,
   updated_at timestamptz not null default now()
 );
-create index if not exists menu_items_chain_id_idx on public.menu_items (chain_id);
+create index if not exists menu_items_chain_id_idx      on public.menu_items (chain_id);
+create index if not exists menu_items_category_group_idx on public.menu_items (category_group);
 
 -- -------------------------------------------------------- data_requests
 create table if not exists public.data_requests (

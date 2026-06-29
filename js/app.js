@@ -31,10 +31,7 @@ window.MM.app = (function () {
     try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch(e) { return def; }
   }
 
-  // Delegate to nutrition-data.js which owns the category mapping.
-  function getCategoryGroup(rawCat) {
-    return window.MM.getCategoryGroup ? window.MM.getCategoryGroup(rawCat) : "Other";
-  }
+
   var filters = {
     recMode:    lsGet("mm_rec_mode",           false),
     category:   lsGet("mm_filter_category",    ""),
@@ -929,7 +926,7 @@ window.MM.app = (function () {
     var seen = {};
     pool.forEach(function (c) {
       (c.items || []).forEach(function (it) {
-        if (it.category) seen[getCategoryGroup(it.category)] = true;
+        if (it.category_group) seen[it.category_group] = true;
       });
     });
     // Return in a fixed display order
@@ -953,7 +950,7 @@ window.MM.app = (function () {
       filters.chainIds.forEach(function (id) { chainSet[id] = true; });
       items = items.filter(function (it) { return chainSet[it.chainId]; });
     }
-    if (filters.category) items = items.filter(function (it) { return getCategoryGroup(it.category) === filters.category; });
+    if (filters.category) items = items.filter(function (it) { return (it.category_group || "Other") === filters.category; });
     if (filters.favorites) {
       var favMap = {};
       window.MM.store.getFavorites().forEach(function (f) { favMap[f.name] = true; });

@@ -12,7 +12,7 @@ import os
 import socketserver
 import sys
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8000))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 

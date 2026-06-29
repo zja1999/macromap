@@ -107,9 +107,9 @@ window.MM.recommend = (function () {
     var candidates = pool(availableChainIds);
 
     // Cheap pre-filters — eliminate items before the scoring math runs.
-    if (opts.categoryGroup && window.MM.getCategoryGroup) {
+    if (opts.categoryGroup) {
       candidates = candidates.filter(function (it) {
-        return window.MM.getCategoryGroup(it.category) === opts.categoryGroup;
+        return (it.category_group || "Other") === opts.categoryGroup;
       });
     }
     if (opts.maxKcal)    candidates = candidates.filter(function (it) { return it.kcal <= opts.maxKcal; });

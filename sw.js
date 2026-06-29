@@ -4,15 +4,15 @@
  * app, and when offline they fall back to the last cached copy. Cross-origin
  * requests (map tiles, Supabase, Overpass/Nominatim, CDN libs) are left to the
  * network — they need connectivity anyway. Bump CACHE on each release. */
-var CACHE = "macromap-v30";
+var CACHE = "macromap-v31";
 var SHELL = [
   "./", "./index.html", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-180.png",
   "./css/styles.css?v=13",
-  "./js/config.js?v=6", "./js/nutrition-data.js?v=6", "./js/storage.js?v=7",
-  "./js/macros.js?v=6", "./js/recommend.js?v=6", "./js/map.js?v=5",
-  "./js/ui.js?v=4", "./js/auth.js?v=4", "./js/data-source.js?v=14",
-  "./js/chain-config.js?v=2", "./js/plate-builder.js?v=3", "./js/app.js?v=32",
+  "./js/config.js?v=6", "./js/nutrition-data.js?v=7", "./js/storage.js?v=7",
+  "./js/macros.js?v=6", "./js/recommend.js?v=7", "./js/map.js?v=5",
+  "./js/ui.js?v=4", "./js/auth.js?v=4", "./js/data-source.js?v=15",
+  "./js/chain-config.js?v=2", "./js/plate-builder.js?v=3", "./js/app.js?v=33",
   "./js/admin-feedback-delete.js?v=2"
 ];
 

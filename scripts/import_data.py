@@ -33,6 +33,29 @@ DEFAULT_CSV = os.path.join(ROOT, "data", "menu_data.csv")
 REQUIRED_COLS = ["chain_id", "chain_name", "name",
                  "kcal", "protein", "carbs", "fat", "sodium", "fiber", "sugar"]
 NUMERIC_COLS = ["kcal", "protein", "carbs", "fat", "sodium", "fiber", "sugar"]
+CATEGORY_GROUPS = {
+    "Breakfast": ["Breakfast", "Bagels"],
+    "Entrees":   ["Entrees", "Burgers", "Chicken", "Chicken Breast", "Chicken Dippers",
+                  "Sandwiches", "Wraps", "Wraps & Tacos", "Bap", "Ciabatta", "Focaccia",
+                  "Toasties/ Croques", "Beef", "Seafood", "Wings", "Wings - Per Wing"],
+    "Salads":    ["Salads"],
+    "Sides":     ["Sides", "Beans", "Greens", "Rice", "Salsas", "Tortillas", "Vegetables"],
+    "Soups":     ["Soup", "Soups"],
+    "Snacks":    ["Appetizers", "Grab N Go", "Impulse Items", "Value",
+                  "Add-ons", "Modifiers", "Toppings", "Breads"],
+    "Desserts":  ["Desserts", "Desserts & Snacks", "Cookies", "Sweets",
+                  "Loaf Cakes", "Muffins & Donuts", "Bar cakes", "Bakery", "Treats"],
+    "Drinks":    ["Beverages", "Drinks", "Cold Coffee", "Espresso Drinks", "Frappuccino",
+                  "Hot Chocolates", "Hot Teas", "Tea Latte", "Protein Beverages",
+                  "Refreshments", "Promo Beverages", "Promo Beverages Alt Coffees",
+                  "Bottled Beverages", "Blonde and Decaf Cold Coffee",
+                  "Blonde and Decaf Espresso Drinks", "Blonde and Decaf Frappuccino"],
+}
+_CAT_REVERSE = {raw: group for group, raws in CATEGORY_GROUPS.items() for raw in raws}
+
+
+def resolve_category_group(raw_cat):
+    return _CAT_REVERSE.get(raw_cat, "Other") if raw_cat else None
 
 
 def load_env():
@@ -93,11 +116,13 @@ def parse_csv(path):
                     "match": aliases,
                 }
 
+            cat = (row.get("category") or "").strip() or None
             items.append({
                 "id": f"{cid}:{slug(name)}",
                 "chain_id": cid,
                 "name": name,
-                "category": (row.get("category") or "").strip() or None,
+                "category": cat,
+                "category_group": resolve_category_group(cat),
                 **nums,
             })
     return chains, items, errors
