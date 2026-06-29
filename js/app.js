@@ -982,30 +982,63 @@ window.MM.app = (function () {
     return items;
   }
 
-  function renderBrowseModeContent(root, chains, nearbyIds, rem) {
-    var controls = el("div", { class: "card menu-controls" });
+  // Shared search card: quick pick presets + collapsible custom criteria.
+  // onSearch(opts) is called when a preset is clicked or "Find matches" is hit.
+  function buildSearchCard(onSearch) {
+    var card = el("div", { class: "card" });
 
-    var searchInput = el("input", { class: "input", id: "menu-search", placeholder: "Search items…", type: "text",
-      value: filters.search || "" });
-    controls.appendChild(field("Search", searchInput));
+    // Quick picks row
+    var presetWrap = el("div", { class: "preset-wrap" });
+    Object.keys(window.MM.recommend.PRESETS).forEach(function (key) {
+      var preset = window.MM.recommend.PRESETS[key];
+      presetWrap.appendChild(el("button", {
+        class: "preset", onclick: function () { onSearch(preset.opts); }
+      }, preset.label));
+    });
+    card.appendChild(presetWrap);
 
-    var sortSel = select("sort", [
-      { v: "ppc", label: "Best protein per calorie" },
-      { v: "protein", label: "Most protein" },
-      { v: "cal_asc", label: "Fewest calories" },
-      { v: "cal_desc", label: "Most calories" }
-    ], filters.sort || "ppc");
-    controls.appendChild(field("Sort by", sortSel));
-
-    var fitOnly = el("input", { type: "checkbox", id: "fit-only" });
-    if (filters.fit) fitOnly.setAttribute("checked", "checked");
-    var compareHint = el("span", { class: "compare-hint muted small" }, "↔ Tick Compare on items to compare side-by-side");
-    controls.appendChild(el("div", { class: "field span2 menu-foot-row" }, [
-      el("label", { class: "check" }, [fitOnly, el("span", null, "Only items that fit my remaining calories")]),
-      compareHint
+    // Collapsible custom criteria
+    var csCollapsed = true;
+    var csChevron = el("span", { class: "collapsible-chevron" }, "▶");
+    var csHead = el("div", { class: "section-label collapsible-head", style: "margin-top:10px" },
+      [csChevron, "Custom criteria"]);
+    var csBody = el("div", { class: "form-grid collapsible-body collapsed" });
+    csBody.appendChild(field("Max calories", numInput("c_maxKcal", "", 0, 3000)));
+    csBody.appendChild(field("Min protein (g)", numInput("c_minProtein", "", 0, 200)));
+    csBody.appendChild(field("Max sodium (mg)", numInput("c_maxSodium", "", 0, 4000)));
+    csBody.appendChild(field("Max sugar (g)", numInput("c_maxSugar", "", 0, 200)));
+    csBody.appendChild(field("Meal size", select("c_mealSize", [
+      { v: "", label: "Any" }, { v: "snack", label: "Snack" }, { v: "regular", label: "Regular" }, { v: "large", label: "Large" }
+    ], "")));
+    csBody.appendChild(field("Prioritize", select("c_prioritize", [
+      { v: "protein", label: "Protein efficiency" }, { v: "lowcal", label: "Low calorie" },
+      { v: "lowcarb", label: "Low carb" }, { v: "lowfat", label: "Low fat" }
+    ], "protein")));
+    csBody.appendChild(el("div", { class: "span2 form-actions" }, [
+      el("button", { class: "btn primary", onclick: function () {
+        onSearch({
+          maxKcal: numOrNull(card, "c_maxKcal"), minProtein: numOrNull(card, "c_minProtein"),
+          maxSodium: numOrNull(card, "c_maxSodium"), maxSugar: numOrNull(card, "c_maxSugar"),
+          mealSize: card.querySelector('[name="c_mealSize"]').value || null,
+          prioritize: card.querySelector('[name="c_prioritize"]').value
+        });
+      }}, "Find matches")
     ]));
+    csHead.addEventListener("click", function () {
+      csCollapsed = !csCollapsed;
+      csChevron.textContent = csCollapsed ? "▶" : "▼";
+      csBody.classList.toggle("collapsed", csCollapsed);
+    });
+    card.appendChild(csHead);
+    card.appendChild(csBody);
+    return card;
+  }
 
-    root.appendChild(controls);
+  function renderBrowseModeContent(root, chains, nearbyIds, rem) {
+    var activeOpts = { prioritize: filters.sort || "ppc" };
+    var compareHint = el("span", { class: "compare-hint muted small" }, "↔ Tick Compare on items to compare side-by-side");
+    root.appendChild(el("div", { class: "card" }, [compareHint]));
+    root.appendChild(buildSearchCard(function (opts) { activeOpts = opts; draw(); }));
 
     var listWrap = el("div", { id: "menu-list", class: "card-list" });
     root.appendChild(listWrap);
@@ -1015,9 +1048,7 @@ window.MM.app = (function () {
     function draw() {
       var savedY2 = window.scrollY;
       ui.clear(listWrap);
-      var q = searchInput.value.trim().toLowerCase();
-      var sort = sortSel.value;
-      var fit = fitOnly.checked && rem;
+      var opts = activeOpts || {};
 
       // Build item pool from selected chains (or all if none selected)
       var activeChains = filters.chainIds.length
@@ -1031,16 +1062,22 @@ window.MM.app = (function () {
       });
 
       items = applySharedItemFilters(items);
-      if (q) items = items.filter(function (it) {
-        return it.name.toLowerCase().indexOf(q) !== -1 || (it.category || "").toLowerCase().indexOf(q) !== -1;
-      });
-      if (fit) items = items.filter(function (it) { return it.kcal <= rem.kcal; });
+      if (opts.maxKcal)     items = items.filter(function (it) { return it.kcal <= opts.maxKcal; });
+      if (opts.minProtein)  items = items.filter(function (it) { return it.protein >= opts.minProtein; });
+      if (opts.maxSodium)   items = items.filter(function (it) { return (it.sodium || 0) <= opts.maxSodium; });
+      if (opts.maxSugar)    items = items.filter(function (it) { return (it.sugar || 0) <= opts.maxSugar; });
+      if (opts.mealSize === "snack")   items = items.filter(function (it) { return it.kcal < 300; });
+      if (opts.mealSize === "regular") items = items.filter(function (it) { return it.kcal >= 300 && it.kcal <= 600; });
+      if (opts.mealSize === "large")   items = items.filter(function (it) { return it.kcal > 600; });
+      if (rem && opts.fitOnly) items = items.filter(function (it) { return it.kcal <= rem.kcal; });
 
+      var pri = opts.prioritize || "ppc";
       items.sort(function (a, b) {
-        if (sort === "protein") return b.protein - a.protein;
-        if (sort === "cal_asc") return a.kcal - b.kcal;
-        if (sort === "cal_desc") return b.kcal - a.kcal;
-        return (b.protein / b.kcal) - (a.protein / a.kcal);
+        if (pri === "protein" || pri === "protein_per_cal") return b.protein - a.protein;
+        if (pri === "lowcal")  return a.kcal - b.kcal;
+        if (pri === "lowcarb") return (a.carbs || 0) - (b.carbs || 0);
+        if (pri === "lowfat")  return (a.fat || 0) - (b.fat || 0);
+        return (b.protein / b.kcal) - (a.protein / a.kcal); // ppc default
       });
 
       if (!items.length) { listWrap.appendChild(browseEmptyState()); window.scrollTo(0, savedY2); return; }
@@ -1076,22 +1113,6 @@ window.MM.app = (function () {
       window.scrollTo(0, savedY2);
     }
 
-    searchInput.addEventListener("input", function () {
-      filters.search = searchInput.value;
-      saveFilter("mm_filter_search", filters.search);
-      draw();
-    });
-    sortSel.addEventListener("change", function () {
-      filters.sort = sortSel.value;
-      saveFilter("mm_filter_sort", filters.sort);
-      draw();
-    });
-    fitOnly.addEventListener("change", function () {
-      filters.fit = fitOnly.checked;
-      saveFilter("mm_filter_fit", filters.fit);
-      draw();
-    });
-
     draw();
     drawCompareBar();
   }
@@ -1104,61 +1125,10 @@ window.MM.app = (function () {
       return;
     }
 
-    // Quick picks (collapsible, starts open)
-    var qpCollapsed = false;
-    var qpChevron = el("span", { class: "collapsible-chevron" }, "▼");
-    var qpHead = el("div", { class: "section-label collapsible-head" }, [qpChevron, "Quick picks"]);
-    var presetWrap = el("div", { class: "preset-wrap collapsible-body" });
-    Object.keys(window.MM.recommend.PRESETS).forEach(function (key) {
-      var preset = window.MM.recommend.PRESETS[key];
-      presetWrap.appendChild(el("button", {
-        class: "preset", onclick: function () { runRecommend(preset.opts); }
-      }, preset.label));
-    });
-    qpHead.addEventListener("click", function () {
-      qpCollapsed = !qpCollapsed;
-      qpChevron.textContent = qpCollapsed ? "▶" : "▼";
-      presetWrap.classList.toggle("collapsed", qpCollapsed);
-    });
-    root.appendChild(el("div", { class: "card" }, [qpHead, presetWrap]));
+    root.appendChild(buildSearchCard(runRecommend));
 
     // Meal Combos
     root.appendChild(buildCombosSection(rem));
-
-    // Custom search (collapsible, starts collapsed)
-    var csCollapsed = true;
-    var csChevron = el("span", { class: "collapsible-chevron" }, "▶");
-    var csHead = el("div", { class: "section-label collapsible-head" }, [csChevron, "Custom search"]);
-    var custom = el("div", { class: "card" });
-    var csBody = el("div", { class: "form-grid collapsible-body collapsed" });
-    csBody.appendChild(field("Max calories", numInput("c_maxKcal", "", 0, 3000)));
-    csBody.appendChild(field("Min protein (g)", numInput("c_minProtein", "", 0, 200)));
-    csBody.appendChild(field("Max sodium (mg)", numInput("c_maxSodium", "", 0, 4000)));
-    csBody.appendChild(field("Max sugar (g)", numInput("c_maxSugar", "", 0, 200)));
-    csBody.appendChild(field("Meal size", select("c_mealSize", [
-      { v: "", label: "Any" }, { v: "snack", label: "Snack" }, { v: "regular", label: "Regular" }, { v: "large", label: "Large" }
-    ], "")));
-    csBody.appendChild(field("Prioritize", select("c_prioritize", [
-      { v: "protein", label: "Protein efficiency" }, { v: "lowcal", label: "Low calorie" },
-      { v: "lowcarb", label: "Low carb" }, { v: "lowfat", label: "Low fat" }
-    ], "protein")));
-    csBody.appendChild(el("div", { class: "span2 form-actions" }, [
-      el("button", { class: "btn primary", onclick: function () {
-        runRecommend({
-          maxKcal: numOrNull(custom, "c_maxKcal"), minProtein: numOrNull(custom, "c_minProtein"),
-          maxSodium: numOrNull(custom, "c_maxSodium"), maxSugar: numOrNull(custom, "c_maxSugar"),
-          mealSize: custom.querySelector('[name="c_mealSize"]').value || null,
-          prioritize: custom.querySelector('[name="c_prioritize"]').value
-        });
-      } }, "Find matches")
-    ]));
-    csHead.addEventListener("click", function () {
-      csCollapsed = !csCollapsed;
-      csChevron.textContent = csCollapsed ? "▶" : "▼";
-      csBody.classList.toggle("collapsed", csCollapsed);
-    });
-    custom.appendChild(csHead); custom.appendChild(csBody);
-    root.appendChild(custom);
 
     var results = el("div", { id: "rec-results", class: "card-list" });
     root.appendChild(results);
