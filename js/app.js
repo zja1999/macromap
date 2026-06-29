@@ -365,14 +365,16 @@ window.MM.app = (function () {
     }
     updateRateVisibility();
 
-    var actions = el("div", { class: "span2 form-actions" }, [
-      el("button", { class: "btn primary", type: "submit" }, opts.submitLabel)
-    ]);
-    if (opts.cancelLabel) {
-      actions.appendChild(el("button", { class: "btn ghost", type: "button",
-        onclick: opts.onCancel }, opts.cancelLabel));
+    if (!opts.noActions) {
+      var actions = el("div", { class: "span2 form-actions" }, [
+        el("button", { class: "btn primary", type: "submit" }, opts.submitLabel)
+      ]);
+      if (opts.cancelLabel) {
+        actions.appendChild(el("button", { class: "btn ghost", type: "button",
+          onclick: opts.onCancel }, opts.cancelLabel));
+      }
+      form.appendChild(actions);
     }
-    form.appendChild(actions);
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -2974,8 +2976,8 @@ window.MM.app = (function () {
 
     function goStep(n) { localStorage.setItem("mm_onboarding_step", String(n)); renderOnboarding(); }
 
-    function stepHeader(num, title, sub) {
-      return el("div", { class: "onboard-discover-bar card" }, [
+    function stepHeader(num, title, sub, actions) {
+      var children = [
         el("div", { class: "onboard-steps" },
           [1, 2, 3].map(function (i) {
             return el("div", { class: "onboard-dot" + (i === num ? " active" : i < num ? " done" : "") });
@@ -2983,25 +2985,33 @@ window.MM.app = (function () {
         ),
         el("strong", null, "Step " + num + " of 3 — " + title),
         el("p", { class: "muted small", style: "margin:4px 0 0" }, sub)
-      ]);
+      ];
+      if (actions) children.push(el("div", { class: "form-actions", style: "margin-top:12px" }, actions));
+      return el("div", { class: "onboard-discover-bar card" }, children);
     }
 
     if (step === 0) {
-      root.appendChild(stepHeader(1, "Set your goals",
-        "Tell us about yourself and we'll calculate your daily calorie and macro targets."));
-
       var defaults = {
         age: 30, sex: "male", heightCm: 178, weightKg: m.lbToKg(175),
         units: "imperial", activity: "moderate", goal: "lose", rate: "0.5", focus: "fat_loss"
       };
+      function skipStep1() {
+        window.MM.store.setProfile(defaults);
+        window.MM.store.setTargets(m.compute(defaults));
+        goStep(2);
+      }
+      root.appendChild(stepHeader(1, "Set your goals",
+        "Tell us about yourself and we'll calculate your daily calorie and macro targets.",
+        [
+          el("button", { class: "btn primary", type: "button", onclick: function () {
+            document.getElementById("profile-form").requestSubmit();
+          }}, "Next →"),
+          el("button", { class: "btn ghost", type: "button", onclick: skipStep1 }, "Skip setup")
+        ]
+      ));
       root.appendChild(buildProfileForm(defaults, {
         submitLabel: "Next →",
-        cancelLabel: "Skip setup",
-        onCancel: function () {
-          window.MM.store.setProfile(defaults);
-          window.MM.store.setTargets(m.compute(defaults));
-          goStep(2);
-        },
+        noActions: true,
         onSubmit: function (prof) {
           window.MM.store.setProfile(prof);
           window.MM.store.setTargets(m.compute(prof));
@@ -3039,7 +3049,15 @@ window.MM.app = (function () {
       }
 
     } else {
-      root.appendChild(stepHeader(3, "You're all set! 🎉", "Here are your daily targets."));
+      function finishOnboarding() {
+        localStorage.removeItem("mm_onboarding_step");
+        filters.recMode = true;
+        saveFilter("mm_rec_mode", true);
+        navigate("menu");
+      }
+      root.appendChild(stepHeader(3, "You're all set! 🎉", "Here are your daily targets.",
+        [el("button", { class: "btn primary", onclick: finishOnboarding }, "Done →")]
+      ));
 
       var tg = window.MM.store.getTargets();
       if (tg) root.appendChild(targetsCard(tg, window.MM.store.getProfile()));
@@ -3057,14 +3075,6 @@ window.MM.app = (function () {
         }
       }
 
-      root.appendChild(el("div", { class: "form-actions" }, [
-        el("button", { class: "btn primary", onclick: function () {
-          localStorage.removeItem("mm_onboarding_step");
-          filters.recMode = true;
-          saveFilter("mm_rec_mode", true);
-          navigate("menu");
-        } }, "Done →")
-      ]));
     }
   }
 
