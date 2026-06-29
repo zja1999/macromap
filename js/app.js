@@ -982,39 +982,41 @@ window.MM.app = (function () {
     return items;
   }
 
-  // Shared search card: quick pick presets + collapsible custom criteria.
+  // Shared search card: collapsible section containing quick pick presets + custom criteria.
   // onSearch(opts) is called when a preset is clicked or "Find matches" is hit.
   function buildSearchCard(onSearch) {
     var card = el("div", { class: "card" });
 
-    // Quick picks row
-    var presetWrap = el("div", { class: "preset-wrap" });
+    // Collapsible section (collapsed by default) containing quick picks + criteria form
+    var csCollapsed = true;
+    var csChevron = el("span", { class: "collapsible-chevron" }, "▶");
+    var csHead = el("div", { class: "section-label collapsible-head" },
+      [csChevron, "Search & filter"]);
+    var csBody = el("div", { class: "collapsible-body collapsed" });
+
+    // Quick picks inside the collapsible
+    var presetWrap = el("div", { class: "preset-wrap", style: "margin-bottom:12px" });
     Object.keys(window.MM.recommend.PRESETS).forEach(function (key) {
       var preset = window.MM.recommend.PRESETS[key];
       presetWrap.appendChild(el("button", {
         class: "preset", onclick: function () { onSearch(preset.opts); }
       }, preset.label));
     });
-    card.appendChild(presetWrap);
+    csBody.appendChild(presetWrap);
 
-    // Collapsible custom criteria
-    var csCollapsed = true;
-    var csChevron = el("span", { class: "collapsible-chevron" }, "▶");
-    var csHead = el("div", { class: "section-label collapsible-head", style: "margin-top:10px" },
-      [csChevron, "Custom criteria"]);
-    var csBody = el("div", { class: "form-grid collapsible-body collapsed" });
-    csBody.appendChild(field("Max calories", numInput("c_maxKcal", "", 0, 3000)));
-    csBody.appendChild(field("Min protein (g)", numInput("c_minProtein", "", 0, 200)));
-    csBody.appendChild(field("Max sodium (mg)", numInput("c_maxSodium", "", 0, 4000)));
-    csBody.appendChild(field("Max sugar (g)", numInput("c_maxSugar", "", 0, 200)));
-    csBody.appendChild(field("Meal size", select("c_mealSize", [
+    var criteriaGrid = el("div", { class: "form-grid" });
+    criteriaGrid.appendChild(field("Max calories", numInput("c_maxKcal", "", 0, 3000)));
+    criteriaGrid.appendChild(field("Min protein (g)", numInput("c_minProtein", "", 0, 200)));
+    criteriaGrid.appendChild(field("Max sodium (mg)", numInput("c_maxSodium", "", 0, 4000)));
+    criteriaGrid.appendChild(field("Max sugar (g)", numInput("c_maxSugar", "", 0, 200)));
+    criteriaGrid.appendChild(field("Meal size", select("c_mealSize", [
       { v: "", label: "Any" }, { v: "snack", label: "Snack" }, { v: "regular", label: "Regular" }, { v: "large", label: "Large" }
     ], "")));
-    csBody.appendChild(field("Prioritize", select("c_prioritize", [
+    criteriaGrid.appendChild(field("Prioritize", select("c_prioritize", [
       { v: "protein", label: "Protein efficiency" }, { v: "lowcal", label: "Low calorie" },
       { v: "lowcarb", label: "Low carb" }, { v: "lowfat", label: "Low fat" }
     ], "protein")));
-    csBody.appendChild(el("div", { class: "span2 form-actions" }, [
+    criteriaGrid.appendChild(el("div", { class: "span2 form-actions" }, [
       el("button", { class: "btn primary", onclick: function () {
         onSearch({
           maxKcal: numOrNull(card, "c_maxKcal"), minProtein: numOrNull(card, "c_minProtein"),
@@ -1024,6 +1026,7 @@ window.MM.app = (function () {
         });
       }}, "Find matches")
     ]));
+    csBody.appendChild(criteriaGrid);
     csHead.addEventListener("click", function () {
       csCollapsed = !csCollapsed;
       csChevron.textContent = csCollapsed ? "▶" : "▼";
@@ -1036,8 +1039,6 @@ window.MM.app = (function () {
 
   function renderBrowseModeContent(root, chains, nearbyIds, rem) {
     var activeOpts = { prioritize: filters.sort || "ppc" };
-    var compareHint = el("span", { class: "compare-hint muted small" }, "↔ Tick Compare on items to compare side-by-side");
-    root.appendChild(el("div", { class: "card" }, [compareHint]));
     root.appendChild(buildSearchCard(function (opts) { activeOpts = opts; draw(); }));
 
     var listWrap = el("div", { id: "menu-list", class: "card-list" });
