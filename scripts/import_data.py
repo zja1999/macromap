@@ -52,10 +52,11 @@ CATEGORY_GROUPS = {
                   "Blonde and Decaf Espresso Drinks", "Blonde and Decaf Frappuccino"],
 }
 _CAT_REVERSE = {raw: group for group, raws in CATEGORY_GROUPS.items() for raw in raws}
+VALID_GROUPS = set(CATEGORY_GROUPS.keys())
 
 
 def resolve_category_group(raw_cat):
-    return _CAT_REVERSE.get(raw_cat, "Other") if raw_cat else None
+    return _CAT_REVERSE.get(raw_cat) if raw_cat else None
 
 
 def load_env():
@@ -117,12 +118,19 @@ def parse_csv(path):
                 }
 
             cat = (row.get("category") or "").strip() or None
+            explicit_group = (row.get("category_group") or "").strip() or None
+            if explicit_group and explicit_group not in VALID_GROUPS:
+                errors.append(
+                    f"line {i} ({name}): 'category_group' must be one of "
+                    f"{', '.join(sorted(VALID_GROUPS))}, or blank — got: {explicit_group!r}"
+                )
+                explicit_group = None
             items.append({
                 "id": f"{cid}:{slug(name)}",
                 "chain_id": cid,
                 "name": name,
                 "category": cat,
-                "category_group": resolve_category_group(cat),
+                "category_group": explicit_group or resolve_category_group(cat),
                 **nums,
             })
     return chains, items, errors

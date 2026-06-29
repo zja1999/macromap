@@ -24,7 +24,8 @@ names below exactly (order doesn't matter).
 | `sugar`       | **Required** | Sugar (g). Number. | `10` |
 | `chain_color`   | Optional | Brand color (hex) for the chain's map pins and list dot. Blank → default green. | `#DA291C` |
 | `match`         | Optional | Pipe-separated OpenStreetMap brand aliases (lowercase) used to match real-world locations on the map. Blank → defaults to the chain name. | `mcdonald's\|mcdonalds\|mc donald's` |
-| `category`      | Optional | Raw menu section name from the restaurant's own menu. The importer automatically maps this to one of the standard filter groups (Entrees, Sides, Drinks, etc.) — you do not need to match the group name exactly. Used by the plate builder to split entrees from sides. | `Burgers` |
+| `category`      | Optional | Raw menu section name from the restaurant's own menu (e.g. the heading it appears under on their website). Used by the plate builder to split entrees from sides. If `category_group` is blank, the importer will try to map this to a standard group automatically. | `Burgers` |
+| `category_group`| Optional | The filter group this item appears under in the Browse tab. Must be exactly one of: `Breakfast`, `Entrees`, `Salads`, `Sides`, `Soups`, `Snacks`, `Desserts`, `Drinks`. Leave blank for items that don't make sense to filter on (toppings, condiments, add-ons, etc.) — those items simply won't appear in the category dropdown. If blank but `category` is set, the importer attempts to map it automatically; unknown `category` values result in no group. | `Entrees` |
 | `serving_label` | Optional | Unit name for one serving of this item. When set, the item gets a quantity stepper instead of a plain Add button. Use `slice` for pizza-by-slice items, `wing` for per-wing items, etc. | `wing` |
 | `default_qty`   | Optional | Starting quantity shown in the stepper. Integer. Blank → 1. | `6` |
 | `max_qty`       | Optional | Maximum quantity the stepper allows. Integer. Blank → 10. | `30` |

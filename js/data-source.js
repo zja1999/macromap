@@ -254,8 +254,13 @@ window.MM.data = (function () {
     });
     return m;
   })();
+  var VALID_GROUPS = (function () {
+    var s = {};
+    Object.keys(CATEGORY_GROUPS).forEach(function (g) { s[g] = true; });
+    return s;
+  })();
   function resolveCategoryGroup(rawCat) {
-    return rawCat ? (_catGroupReverse[rawCat] || "Other") : null;
+    return rawCat ? (_catGroupReverse[rawCat] || null) : null;
   }
 
   function uploadSlug(t) {
@@ -346,7 +351,12 @@ window.MM.data = (function () {
       });
       var servingLabel = String(row.serving_label == null ? "" : row.serving_label).trim() || null;
       var cat = String(row.category == null ? "" : row.category).trim() || null;
-      items.push(Object.assign({ id: id, chain_id: cid, name: name, category: cat, category_group: resolveCategoryGroup(cat), serving_label: servingLabel }, nums, optInts));
+      var explicitGroup = String(row.category_group == null ? "" : row.category_group).trim() || null;
+      if (explicitGroup && !VALID_GROUPS[explicitGroup]) {
+        errors.push("Line " + line + " (" + name + "): \"category_group\" must be one of Breakfast, Entrees, Salads, Sides, Soups, Snacks, Desserts, Drinks, or blank — got: \"" + explicitGroup + "\"");
+        explicitGroup = null;
+      }
+      items.push(Object.assign({ id: id, chain_id: cid, name: name, category: cat, category_group: explicitGroup || resolveCategoryGroup(cat), serving_label: servingLabel }, nums, optInts));
     });
     return { errors: errors, chains: chains, items: items, dupesInFile: dupes };
   }
