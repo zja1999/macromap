@@ -722,7 +722,8 @@ textarea.input { resize: vertical; }
   border-top: 1px dashed var(--border); }
 
 /* ----------------------------------------------------------- onboarding */
-.onboard-loc-result { min-height: 52px; padding: 14px 16px; }
+.onboard-discover-bar { margin-bottom: 16px; padding: 16px 18px; border-left: 3px solid var(--accent); }
+.onboard-discover-bar strong { font-size: 15px; }
 .onboard-header { text-align: center; padding: 24px 20px 16px; }
 .onboard-header h2 { font-size: 22px; margin: 10px 0 6px; }
 .onboard-header p { margin: 0; }

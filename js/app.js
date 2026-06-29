@@ -3030,58 +3030,33 @@ window.MM.app = (function () {
       }));
 
     } else if (step === 1) {
-      root.appendChild(stepHeader(2, "Find restaurants near you",
-        "We'll look for places in your area that have nutrition data so we can tailor your recommendations."));
-
-      var resultWrap = el("div", { class: "card onboard-loc-result" });
-      var nextBtn = el("button", { class: "btn primary", onclick: function () { goStep(2); } }, "Next →");
-
-      function showLocResults(places) {
-        state.nearbyPlaces = places;
-        ui.clear(resultWrap);
-        var chainsSeen = {}, chainsFound = [];
-        places.forEach(function (p) {
-          if (p.hasData && p.chain && !chainsSeen[p.chain.id]) {
-            chainsSeen[p.chain.id] = true;
-            chainsFound.push(p.chain);
-          }
-        });
-        if (!chainsFound.length) {
-          resultWrap.appendChild(el("p", { class: "muted small", style: "margin:0" },
-            "No restaurants with nutrition data found nearby. You can still browse all chains."));
-        } else {
-          resultWrap.appendChild(el("p", { class: "muted small", style: "margin:0 0 10px" },
-            "Found " + chainsFound.length + " chain" + (chainsFound.length !== 1 ? "s" : "") + " near you:"));
-          var chips = el("div", { class: "filter-chips" });
-          chainsFound.forEach(function (c) { chips.appendChild(el("span", { class: "chip active" }, c.name)); });
-          resultWrap.appendChild(chips);
+      // Step 2 uses the real Discover view (map is a singleton, can't be embedded).
+      // Navigate there and inject an onboarding progress banner at the top.
+      navigate("discover");
+      var discoverEl = document.getElementById("view-discover");
+      if (!discoverEl.querySelector(".onboard-discover-bar")) {
+        function finishStep2() {
+          var bar = discoverEl.querySelector(".onboard-discover-bar");
+          if (bar) bar.remove();
+          goStep(2);
+          navigate("onboarding");
         }
+        var bar = el("div", { class: "onboard-discover-bar card" }, [
+          el("div", { class: "onboard-steps" }, [
+            el("span", { class: "onboard-dot done" }),
+            el("span", { class: "onboard-dot active" }),
+            el("span", { class: "onboard-dot" })
+          ]),
+          el("strong", null, "Step 2 of 3 — Find restaurants near you"),
+          el("p", { class: "muted small", style: "margin:4px 0 12px" },
+            "Use your location or search an address to find nearby chains. When you're ready, tap Done."),
+          el("div", { class: "form-actions" }, [
+            el("button", { class: "btn primary", onclick: finishStep2 }, "Done →"),
+            el("button", { class: "btn ghost", onclick: finishStep2 }, "Skip")
+          ])
+        ]);
+        discoverEl.insertBefore(bar, discoverEl.firstChild);
       }
-
-      var locBtn = el("button", { class: "btn primary", onclick: function () {
-        locBtn.disabled = true; locBtn.textContent = "Searching…";
-        ui.clear(resultWrap);
-        resultWrap.appendChild(el("p", { class: "muted small", style: "margin:0" }, "Looking for your location…"));
-        window.MM.map.locateUser()
-          .then(function (pos) { return window.MM.map.searchNearby(pos.lat, pos.lng, 2400); })
-          .then(function (places) {
-            showLocResults(places);
-            locBtn.textContent = "Search again"; locBtn.disabled = false;
-          })
-          .catch(function (err) {
-            ui.clear(resultWrap);
-            resultWrap.appendChild(el("p", { class: "muted small", style: "margin:0" },
-              err.message || "Could not get your location."));
-            locBtn.textContent = "Try again"; locBtn.disabled = false;
-          });
-      } }, "📍 Find restaurants near me");
-
-      root.appendChild(locBtn);
-      root.appendChild(resultWrap);
-      root.appendChild(el("div", { class: "form-actions" }, [
-        nextBtn,
-        el("button", { class: "btn ghost", onclick: function () { goStep(2); } }, "Skip")
-      ]));
 
     } else {
       root.appendChild(stepHeader(3, "You're all set! 🎉", "Here are your daily targets."));
