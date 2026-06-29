@@ -1110,7 +1110,26 @@ window.MM.app = (function () {
       // Pass per-item chain/cfg for plate builder link in itemCard (single chain only)
       var singleChain = activeChains.length === 1 ? activeChains[0] : null;
       var singleCfg = singleChain ? window.MM.getChainConfig(singleChain) : null;
-      items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw, singleChain, singleCfg)); });
+
+      // Paginate: render first PAGE items immediately; "Show more" appends the rest.
+      var PAGE = 50;
+      var shown = 0;
+      function renderPage() {
+        var batch = items.slice(shown, shown + PAGE);
+        batch.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw, singleChain, singleCfg)); });
+        shown += batch.length;
+        var existing = listWrap.querySelector(".show-more-btn");
+        if (existing) existing.remove();
+        if (shown < items.length) {
+          var moreBtn = el("button", {
+            class: "btn show-more-btn",
+            style: "display:block;margin:12px auto",
+            onclick: renderPage
+          }, "Show more (" + (items.length - shown) + " remaining)");
+          listWrap.appendChild(moreBtn);
+        }
+      }
+      renderPage();
       window.scrollTo(0, savedY2);
     }
 
@@ -1143,7 +1162,11 @@ window.MM.app = (function () {
     function runRecommend(opts) {
       var ids = getChainIds();
       var rem2 = remaining();
-      var ranked = window.MM.recommend.rank(rem2, opts, ids, 50);
+      // When a category filter is active, rank the full pool first so the
+      // top-N limit doesn't prune low-scoring categories (e.g. Soups) before
+      // the category filter runs. Without a category filter, cap at 200 for speed.
+      var rankLimit = filters.category ? null : 200;
+      var ranked = window.MM.recommend.rank(rem2, opts, ids, rankLimit);
       ranked = applySharedItemFilters(ranked).slice(0, 15);
       ui.clear(results);
       var scopeLabel = ids && ids.length === 1
