@@ -3030,29 +3030,56 @@ window.MM.app = (function () {
       }));
 
     } else if (step === 1) {
-      if (!window.MM.NUTRITION || !window.MM.NUTRITION.length) { goStep(2); return; }
+      root.appendChild(stepHeader(2, "Find restaurants near you",
+        "We'll look for places in your area that have nutrition data so we can tailor your recommendations."));
 
-      root.appendChild(stepHeader(2, "Pick your usual spots",
-        "We'll use these as your default when finding recommendations. You can change this anytime."));
+      var resultWrap = el("div", { class: "card onboard-loc-result" });
+      var nextBtn = el("button", { class: "btn primary", onclick: function () { goStep(2); } }, "Next →");
 
-      var preferred = JSON.parse(localStorage.getItem("mm_preferred_chains") || "[]");
-      var chainGrid = el("div", { class: "card chain-pick-grid" });
-      window.MM.NUTRITION.forEach(function (chain) {
-        var btn = el("button", {
-          class: "chain-pick-btn" + (preferred.indexOf(chain.id) !== -1 ? " on" : ""),
-          onclick: function () {
-            var idx = preferred.indexOf(chain.id);
-            if (idx === -1) preferred.push(chain.id);
-            else preferred.splice(idx, 1);
-            localStorage.setItem("mm_preferred_chains", JSON.stringify(preferred));
-            btn.classList.toggle("on", preferred.indexOf(chain.id) !== -1);
+      function showLocResults(places) {
+        state.nearbyPlaces = places;
+        ui.clear(resultWrap);
+        var chainsSeen = {}, chainsFound = [];
+        places.forEach(function (p) {
+          if (p.hasData && p.chain && !chainsSeen[p.chain.id]) {
+            chainsSeen[p.chain.id] = true;
+            chainsFound.push(p.chain);
           }
-        }, chain.name);
-        chainGrid.appendChild(btn);
-      });
-      root.appendChild(chainGrid);
+        });
+        if (!chainsFound.length) {
+          resultWrap.appendChild(el("p", { class: "muted small", style: "margin:0" },
+            "No restaurants with nutrition data found nearby. You can still browse all chains."));
+        } else {
+          resultWrap.appendChild(el("p", { class: "muted small", style: "margin:0 0 10px" },
+            "Found " + chainsFound.length + " chain" + (chainsFound.length !== 1 ? "s" : "") + " near you:"));
+          var chips = el("div", { class: "filter-chips" });
+          chainsFound.forEach(function (c) { chips.appendChild(el("span", { class: "chip active" }, c.name)); });
+          resultWrap.appendChild(chips);
+        }
+      }
+
+      var locBtn = el("button", { class: "btn primary", onclick: function () {
+        locBtn.disabled = true; locBtn.textContent = "Searching…";
+        ui.clear(resultWrap);
+        resultWrap.appendChild(el("p", { class: "muted small", style: "margin:0" }, "Looking for your location…"));
+        window.MM.map.locateUser()
+          .then(function (pos) { return window.MM.map.searchNearby(pos.lat, pos.lng, 2400); })
+          .then(function (places) {
+            showLocResults(places);
+            locBtn.textContent = "Search again"; locBtn.disabled = false;
+          })
+          .catch(function (err) {
+            ui.clear(resultWrap);
+            resultWrap.appendChild(el("p", { class: "muted small", style: "margin:0" },
+              err.message || "Could not get your location."));
+            locBtn.textContent = "Try again"; locBtn.disabled = false;
+          });
+      } }, "📍 Find restaurants near me");
+
+      root.appendChild(locBtn);
+      root.appendChild(resultWrap);
       root.appendChild(el("div", { class: "form-actions" }, [
-        el("button", { class: "btn primary", onclick: function () { goStep(2); } }, "Next →"),
+        nextBtn,
         el("button", { class: "btn ghost", onclick: function () { goStep(2); } }, "Skip")
       ]));
 
@@ -3063,8 +3090,8 @@ window.MM.app = (function () {
       if (tg) root.appendChild(targetsCard(tg, window.MM.store.getProfile()));
 
       if (window.MM.NUTRITION && window.MM.NUTRITION.length) {
-        var preferred2 = JSON.parse(localStorage.getItem("mm_preferred_chains") || "[]");
-        var ids = preferred2.length ? preferred2 : null;
+        var nearbyChainIds = availableChainIds();
+        var ids = nearbyChainIds.length ? nearbyChainIds : null;
         var rem2 = remaining();
         var ranked = window.MM.recommend.rank(rem2, window.MM.recommend.PRESETS.fits_remaining.opts, ids, 3);
         if (ranked.length) {
