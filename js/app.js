@@ -2499,19 +2499,66 @@ window.MM.app = (function () {
         status.innerHTML = "";
       }
 
-      function doUpload(f, matchedRequestIds) {
+      function doUpload(built, matchedRequestIds) {
         status.className = "upload-status busy";
-        status.textContent = "Uploading " + f.name + " (" + (idx + 1) + "/" + files.length + ")…";
-        window.MM.data.uploadNutrition(f).then(function (sum) {
+        status.textContent = "Uploading (" + (idx + 1) + "/" + files.length + ")…";
+        window.MM.data.executeUpload(built).then(function (sum) {
           window.MM.data.closeMatchedRequests(matchedRequestIds).catch(function () {});
           results.push(sum.chains + ": " + sum.item_count + " items");
           idx++;
           processNext();
         }).catch(function (e) {
-          errors.push(f.name + ": " + (e.message || "failed"));
+          errors.push((built.filename || "file") + ": " + (e.message || "failed"));
           idx++;
           processNext();
         });
+      }
+
+      function showMatchWarning(check) {
+        resetStatus();
+        status.className = "upload-status err";
+        status.appendChild(el("div", { style: "font-weight:600;margin-bottom:10px" },
+          "⚠ No data requests matched these chains — they may not appear on the map:"));
+
+        check.unmatched.forEach(function (c) {
+          var aliasDisplay = el("div", { style: "font-size:12px;color:#888;margin:2px 0 6px 12px" },
+            "Aliases: " + check.built.chains[c.id].match.join(" | "));
+          var aliasInput = el("input", {
+            type: "text", placeholder: "add alias (lowercase)…",
+            style: "font-size:12px;padding:3px 6px;width:190px;margin-right:4px"
+          });
+          var addBtn = el("button", { class: "btn", type: "button", style: "font-size:12px;padding:3px 8px" }, "+ Add");
+          addBtn.addEventListener("click", function () {
+            var alias = aliasInput.value.trim().toLowerCase();
+            if (!alias) return;
+            check.built.chains[c.id].match.push(alias);
+            addBtn.disabled = true;
+            addBtn.textContent = "…";
+            var chainRows = Object.keys(check.built.chains).map(function (k) { return check.built.chains[k]; });
+            window.MM.data.checkChainRequests(chainRows).then(function (newCheck) {
+              newCheck.built = check.built;
+              if (!newCheck.unmatched.length) {
+                doUpload(newCheck.built, newCheck.matchedRequestIds);
+              } else {
+                showMatchWarning(newCheck);
+              }
+            }).catch(function () {
+              addBtn.disabled = false;
+              addBtn.textContent = "+ Add";
+            });
+          });
+          status.appendChild(el("div", { style: "margin-bottom:12px" }, [
+            el("div", { style: "font-weight:500" }, "• " + c.name),
+            aliasDisplay,
+            el("div", { style: "margin-left:12px" }, [aliasInput, addBtn])
+          ]));
+        });
+
+        var proceedBtn = el("button", { class: "btn primary", type: "button" }, "Upload anyway");
+        var cancelBtn  = el("button", { class: "btn", type: "button", style: "margin-left:8px" }, "Cancel");
+        proceedBtn.addEventListener("click", function () { doUpload(check.built, check.matchedRequestIds); });
+        cancelBtn.addEventListener("click", function () { resetStatus(); btn.disabled = false; fileIn.value = ""; });
+        status.appendChild(el("div", { style: "margin-top:4px" }, [proceedBtn, cancelBtn]));
       }
 
       function processNext() {
@@ -2532,25 +2579,9 @@ window.MM.app = (function () {
         var f = files[idx];
         status.className = "upload-status busy";
         status.textContent = "Checking " + f.name + " (" + (idx + 1) + "/" + files.length + ")…";
-
         window.MM.data.preCheckUpload(f).then(function (check) {
-          if (!check.unmatched.length) { doUpload(f, check.matchedRequestIds); return; }
-
-          // Some chains have no matching data requests — warn the admin
-          resetStatus();
-          status.className = "upload-status err";
-          var lines = "⚠ No data requests matched these chains — they may not appear on the map:\n\n";
-          check.unmatched.forEach(function (c) {
-            lines += "• " + c.name + "\n  Aliases: " + c.aliases.join(" | ") + "\n";
-          });
-          var msg = el("pre", { style: "margin:0 0 10px;white-space:pre-wrap;font-size:13px" }, lines.trimEnd());
-          var proceedBtn = el("button", { class: "btn primary", type: "button" }, "Upload anyway");
-          var cancelBtn  = el("button", { class: "btn",         type: "button", style: "margin-left:8px" }, "Cancel");
-          proceedBtn.addEventListener("click", function () { doUpload(f, check.matchedRequestIds); });
-          cancelBtn.addEventListener("click", function () { resetStatus(); btn.disabled = false; fileIn.value = ""; });
-          status.appendChild(msg);
-          status.appendChild(proceedBtn);
-          status.appendChild(cancelBtn);
+          if (!check.unmatched.length) { doUpload(check.built, check.matchedRequestIds); return; }
+          showMatchWarning(check);
         }).catch(function (e) {
           errors.push(f.name + ": " + (e.message || "failed"));
           idx++;

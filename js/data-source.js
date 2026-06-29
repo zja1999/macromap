@@ -430,12 +430,45 @@ window.MM.data = (function () {
     }).then(checkOk);
   }
 
-  // Orchestrates a full upload. Resolves a summary; rejects with a friendly,
-  // multi-line Error (validation problems, in-file dupes, or DB clashes).
+  // Write pre-parsed data to Supabase. Separated from uploadNutrition so the
+  // admin UI can upload modified in-memory data (e.g. after adding an alias).
+  function executeUpload(built) {
+    if (!isAdmin()) return Promise.reject(new Error("Admins only."));
+    if (!enabled()) return Promise.reject(new Error("Cloud connection isn't configured."));
+    var chainKeys = Object.keys(built.chains);
+    return fetchExistingItemIds(chainKeys).then(function (existing) {
+      var clash = built.items.filter(function (it) { return existing[it.id]; })
+        .map(function (it) { return it.name + "  ·  " + it.chain_id; });
+      if (clash.length) {
+        throw new Error(clash.length + " item(s) already exist in the database:\n" + bullets(clash) +
+          "\n\nNothing was added. Remove those rows (or delete the existing items first) and re-upload.");
+      }
+      var chainRows = chainKeys.map(function (k) { return built.chains[k]; });
+      return upsertChains(chainRows)
+        .then(function () { return insertItemsBatched(built.items); })
+        .then(function () {
+          var summary = {
+            item_count: built.items.length,
+            chain_count: chainKeys.length,
+            chains: chainRows.map(function (c) { return c.name; }).join(", "),
+            filename: built.filename || null
+          };
+          return insertUploadLog(summary).then(function () { return summary; });
+        })
+        .catch(function (err) {
+          var done = err && err.insertedCount;
+          if (typeof done === "number" && done > 0 && done < built.items.length) {
+            throw new Error("Upload interrupted after saving " + done + " of " + built.items.length +
+              " items — the rest were not added. Re-upload this same file: it will list the items that already exist; remove those rows and upload the remainder. (" + (err.message || "error") + ")");
+          }
+          throw err;
+        });
+    });
+  }
+
   function uploadNutrition(file) {
     if (!isAdmin()) return Promise.reject(new Error("Admins only."));
     if (!enabled()) return Promise.reject(new Error("Cloud connection isn't configured."));
-
     return readRows(file).then(function (rows) {
       var built = buildFromRows(rows);
       if (built.errors && built.errors.length) {
@@ -444,40 +477,8 @@ window.MM.data = (function () {
       if (built.dupesInFile && built.dupesInFile.length) {
         throw new Error("Duplicate items inside the file (same chain + item appears more than once):\n" + bullets(built.dupesInFile) + "\n\nRemove the duplicates and re-upload.");
       }
-
-      var chainKeys = Object.keys(built.chains);
-      return fetchExistingItemIds(chainKeys).then(function (existing) {
-        var clash = built.items.filter(function (it) { return existing[it.id]; })
-          .map(function (it) { return it.name + "  ·  " + it.chain_id; });
-        if (clash.length) {
-          throw new Error(clash.length + " item(s) already exist in the database:\n" + bullets(clash) +
-            "\n\nNothing was added. Remove those rows (or delete the existing items first) and re-upload.");
-        }
-
-        var chainRows = chainKeys.map(function (k) { return built.chains[k]; });
-        return upsertChains(chainRows)
-          .then(function () { return insertItemsBatched(built.items); })
-          .then(function () {
-            var summary = {
-              item_count: built.items.length,
-              chain_count: chainKeys.length,
-              chains: chainRows.map(function (c) { return c.name; }).join(", "),
-              filename: (file && file.name) || null
-            };
-            return insertUploadLog(summary).then(function () { return summary; });
-          })
-          .catch(function (err) {
-            // A mid-batch failure leaves a partial import (no transaction). Tell
-            // the admin what landed and how to finish — re-uploading lists the
-            // already-saved items so they can drop those rows and upload the rest.
-            var done = err && err.insertedCount;
-            if (typeof done === "number" && done > 0 && done < built.items.length) {
-              throw new Error("Upload interrupted after saving " + done + " of " + built.items.length +
-                " items — the rest were not added. Re-upload this same file: it will list the items that already exist; remove those rows and upload the remainder. (" + (err.message || "error") + ")");
-            }
-            throw err;
-          });
-      });
+      built.filename = file ? file.name : null;
+      return executeUpload(built);
     });
   }
 
@@ -494,6 +495,30 @@ window.MM.data = (function () {
     });
   }
 
+  function checkChainRequests(chainRows) {
+    return fetch(cfg().supabaseUrl + "/rest/v1/data_requests?select=id,chain&status=eq.open&limit=500", { headers: authHeaders() })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .catch(function () { return []; })
+      .then(function (requests) {
+        var unmatched = [], matchedRequestIds = [];
+        chainRows.forEach(function (chain) {
+          var aliases = chain.match;
+          var hits = requests.filter(function (req) {
+            var n = (req.chain || "").toLowerCase().trim();
+            return aliases.some(function (a) { return n.indexOf(a) !== -1; });
+          });
+          if (!hits.length) {
+            unmatched.push({ id: chain.id, name: chain.name, aliases: aliases });
+          } else {
+            hits.forEach(function (req) {
+              if (matchedRequestIds.indexOf(req.id) === -1) matchedRequestIds.push(req.id);
+            });
+          }
+        });
+        return { unmatched: unmatched, matchedRequestIds: matchedRequestIds };
+      });
+  }
+
   function preCheckUpload(file) {
     if (!isAdmin()) return Promise.reject(new Error("Admins only."));
     if (!enabled()) return Promise.reject(new Error("Cloud connection isn't configured."));
@@ -502,28 +527,14 @@ window.MM.data = (function () {
       if (built.errors && built.errors.length) {
         throw new Error("The file has " + built.errors.length + " formatting problem(s):\n" + bullets(built.errors, 12));
       }
+      if (built.dupesInFile && built.dupesInFile.length) {
+        throw new Error("Duplicate items inside the file (same chain + item appears more than once):\n" + bullets(built.dupesInFile) + "\n\nRemove the duplicates and re-upload.");
+      }
+      built.filename = file ? file.name : null;
       var chainRows = Object.keys(built.chains).map(function (k) { return built.chains[k]; });
-      return fetch(cfg().supabaseUrl + "/rest/v1/data_requests?select=id,chain&status=eq.open&limit=500", { headers: authHeaders() })
-        .then(function (r) { return r.ok ? r.json() : []; })
-        .catch(function () { return []; })
-        .then(function (requests) {
-          var unmatched = [], matchedRequestIds = [];
-          chainRows.forEach(function (chain) {
-            var aliases = chain.match;
-            var hits = requests.filter(function (req) {
-              var n = (req.chain || "").toLowerCase().trim();
-              return aliases.some(function (a) { return n.indexOf(a) !== -1; });
-            });
-            if (!hits.length) {
-              unmatched.push({ name: chain.name, aliases: aliases });
-            } else {
-              hits.forEach(function (req) {
-                if (matchedRequestIds.indexOf(req.id) === -1) matchedRequestIds.push(req.id);
-              });
-            }
-          });
-          return { unmatched: unmatched, matchedRequestIds: matchedRequestIds };
-        });
+      return checkChainRequests(chainRows).then(function (check) {
+        return { built: built, unmatched: check.unmatched, matchedRequestIds: check.matchedRequestIds };
+      });
     });
   }
 
@@ -545,6 +556,8 @@ window.MM.data = (function () {
     uploadNutrition: uploadNutrition,
     fetchUploadLog: fetchUploadLog,
     preCheckUpload: preCheckUpload,
+    checkChainRequests: checkChainRequests,
+    executeUpload: executeUpload,
     closeMatchedRequests: closeMatchedRequests
   };
 })();
