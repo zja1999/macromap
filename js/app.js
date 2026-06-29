@@ -2494,6 +2494,26 @@ window.MM.app = (function () {
       var results = [], errors = [];
       var idx = 0;
 
+      function resetStatus() {
+        status.className = "upload-status";
+        status.innerHTML = "";
+      }
+
+      function doUpload(f, matchedRequestIds) {
+        status.className = "upload-status busy";
+        status.textContent = "Uploading " + f.name + " (" + (idx + 1) + "/" + files.length + ")…";
+        window.MM.data.uploadNutrition(f).then(function (sum) {
+          window.MM.data.closeMatchedRequests(matchedRequestIds).catch(function () {});
+          results.push(sum.chains + ": " + sum.item_count + " items");
+          idx++;
+          processNext();
+        }).catch(function (e) {
+          errors.push(f.name + ": " + (e.message || "failed"));
+          idx++;
+          processNext();
+        });
+      }
+
       function processNext() {
         if (idx >= files.length) {
           fileIn.value = "";
@@ -2511,11 +2531,26 @@ window.MM.app = (function () {
         }
         var f = files[idx];
         status.className = "upload-status busy";
-        status.textContent = "Processing " + f.name + " (" + (idx + 1) + "/" + files.length + ")…";
-        window.MM.data.uploadNutrition(f).then(function (sum) {
-          results.push(sum.chains + ": " + sum.item_count + " items");
-          idx++;
-          processNext();
+        status.textContent = "Checking " + f.name + " (" + (idx + 1) + "/" + files.length + ")…";
+
+        window.MM.data.preCheckUpload(f).then(function (check) {
+          if (!check.unmatched.length) { doUpload(f, check.matchedRequestIds); return; }
+
+          // Some chains have no matching data requests — warn the admin
+          resetStatus();
+          status.className = "upload-status err";
+          var lines = "⚠ No data requests matched these chains — they may not appear on the map:\n\n";
+          check.unmatched.forEach(function (c) {
+            lines += "• " + c.name + "\n  Aliases: " + c.aliases.join(" | ") + "\n";
+          });
+          var msg = el("pre", { style: "margin:0 0 10px;white-space:pre-wrap;font-size:13px" }, lines.trimEnd());
+          var proceedBtn = el("button", { class: "btn primary", type: "button" }, "Upload anyway");
+          var cancelBtn  = el("button", { class: "btn",         type: "button", style: "margin-left:8px" }, "Cancel");
+          proceedBtn.addEventListener("click", function () { doUpload(f, check.matchedRequestIds); });
+          cancelBtn.addEventListener("click", function () { resetStatus(); btn.disabled = false; fileIn.value = ""; });
+          status.appendChild(msg);
+          status.appendChild(proceedBtn);
+          status.appendChild(cancelBtn);
         }).catch(function (e) {
           errors.push(f.name + ": " + (e.message || "failed"));
           idx++;

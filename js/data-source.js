@@ -494,6 +494,46 @@ window.MM.data = (function () {
     });
   }
 
+  function preCheckUpload(file) {
+    if (!isAdmin()) return Promise.reject(new Error("Admins only."));
+    if (!enabled()) return Promise.reject(new Error("Cloud connection isn't configured."));
+    return readRows(file).then(function (rows) {
+      var built = buildFromRows(rows);
+      if (built.errors && built.errors.length) {
+        throw new Error("The file has " + built.errors.length + " formatting problem(s):\n" + bullets(built.errors, 12));
+      }
+      var chainRows = Object.keys(built.chains).map(function (k) { return built.chains[k]; });
+      return fetch(cfg().supabaseUrl + "/rest/v1/data_requests?select=id,chain&status=eq.open&limit=500", { headers: authHeaders() })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .catch(function () { return []; })
+        .then(function (requests) {
+          var unmatched = [], matchedRequestIds = [];
+          chainRows.forEach(function (chain) {
+            var aliases = chain.match;
+            var hits = requests.filter(function (req) {
+              var n = (req.chain || "").toLowerCase().trim();
+              return aliases.some(function (a) { return n.indexOf(a) !== -1; });
+            });
+            if (!hits.length) {
+              unmatched.push({ name: chain.name, aliases: aliases });
+            } else {
+              hits.forEach(function (req) {
+                if (matchedRequestIds.indexOf(req.id) === -1) matchedRequestIds.push(req.id);
+              });
+            }
+          });
+          return { unmatched: unmatched, matchedRequestIds: matchedRequestIds };
+        });
+    });
+  }
+
+  function closeMatchedRequests(requestIds) {
+    if (!requestIds || !requestIds.length) return Promise.resolve();
+    return Promise.all(requestIds.map(function (id) {
+      return updateRequestStatus(id, "added").catch(function () {});
+    }));
+  }
+
   return {
     loadNutrition: loadNutrition,
     submitRequest: submitRequest,
@@ -503,6 +543,8 @@ window.MM.data = (function () {
     fetchFeedback: fetchFeedback,
     updateRequestStatus: updateRequestStatus,
     uploadNutrition: uploadNutrition,
-    fetchUploadLog: fetchUploadLog
+    fetchUploadLog: fetchUploadLog,
+    preCheckUpload: preCheckUpload,
+    closeMatchedRequests: closeMatchedRequests
   };
 })();
