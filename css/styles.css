@@ -667,10 +667,10 @@ textarea.input { resize: vertical; }
   .target-grid, .micro-row-card, .remaining-strip .rem-grid { grid-template-columns: repeat(2,1fr); }
 }
 /* ----------------------------------------------------------- rec toggle */
-.rec-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; }
-.toggle-label { display: flex; flex-direction: column; gap: 2px; }
-.toggle-text { font-weight: 700; font-size: 15px; }
-.toggle-sub { font-size: 12px; }
+.rec-toggle-row { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 12px 16px; }
+.toggle-side-label { font-size: 14px; font-weight: 600; white-space: nowrap; transition: color .15s; }
+.toggle-side-active { color: var(--accent); }
+.toggle-side-muted { color: var(--fg-muted, #888); }
 .toggle-switch { position: relative; cursor: pointer; flex-shrink: 0; }
 .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
 .toggle-track {

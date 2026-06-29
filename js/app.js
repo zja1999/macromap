@@ -63,7 +63,7 @@ window.MM.app = (function () {
     return _buildCatGroupCache()[rawCat] || "Other";
   }
   var filters = {
-    recMode:    lsGet("mm_rec_mode",           true),
+    recMode:    lsGet("mm_rec_mode",           false),
     category:   lsGet("mm_filter_category",    ""),
     chainIds:   lsGetJSON("mm_filter_chains",  []),
     search:     lsGet("mm_filter_search",      ""),
@@ -851,14 +851,13 @@ window.MM.app = (function () {
       renderMenu();
     });
     return el("div", { class: "card rec-toggle-row" }, [
-      el("div", { class: "toggle-label" }, [
-        el("span", { class: "toggle-text" }, filters.recMode ? "Recommendations" : "All Menu Items"),
-        el("span", { class: "toggle-sub muted small" },
-          filters.recMode ? "Ranked for your remaining macros" : "Browse full menus unranked")
-      ]),
+      el("span", { class: "toggle-side-label" + (!filters.recMode ? " toggle-side-active" : " toggle-side-muted") },
+        "All Menu Items"),
       el("label", { class: "toggle-switch", for: "rec-mode-cb" }, [cb,
         el("span", { class: "toggle-track" }, [el("span", { class: "toggle-thumb" })])
-      ])
+      ]),
+      el("span", { class: "toggle-side-label" + (filters.recMode ? " toggle-side-active" : " toggle-side-muted") },
+        "Recommendations")
     ]);
   }
 
@@ -1103,22 +1102,6 @@ window.MM.app = (function () {
       return;
     }
 
-    // Scope radio — only relevant when no specific chains are selected
-    var recCtrlCard = el("div", { class: "card" });
-    var hasChainFilter = filters.chainIds && filters.chainIds.length > 0;
-    var scopeNear = el("input", { type: "radio", name: "scope", value: "near",
-      checked: (!hasChainFilter && nearbyIds.length) ? "checked" : null,
-      disabled: nearbyIds.length ? null : "disabled" });
-    var scopeAll = el("input", { type: "radio", name: "scope", value: "all",
-      checked: (!hasChainFilter || !nearbyIds.length) ? "checked" : null });
-    var scopeRow = el("div", { class: "scope-row" + (hasChainFilter ? " hidden" : "") }, [
-      el("label", { class: "check tiny" }, [scopeNear,
-        el("span", null, "Only chains near me" + (nearbyIds.length ? " (" + nearbyIds.length + ")" : " — search Discover first"))]),
-      el("label", { class: "check tiny" }, [scopeAll, el("span", null, "All chains in database")])
-    ]);
-    recCtrlCard.appendChild(scopeRow);
-    root.appendChild(recCtrlCard);
-
     // Quick picks (collapsible, starts open)
     var qpCollapsed = false;
     var qpChevron = el("span", { class: "collapsible-chevron" }, "▼");
@@ -1181,10 +1164,7 @@ window.MM.app = (function () {
     runRecommend(window.MM.recommend.PRESETS.fits_remaining.opts);
 
     function getChainIds() {
-      if (filters.chainIds && filters.chainIds.length) return filters.chainIds;
-      var scopeEl = root.querySelector('input[name="scope"]:checked');
-      if (scopeEl && scopeEl.value === "near") return nearbyIds;
-      return null;
+      return filters.chainIds && filters.chainIds.length ? filters.chainIds : null;
     }
 
     function runRecommend(opts) {
