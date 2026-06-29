@@ -30,6 +30,38 @@ window.MM.app = (function () {
   function lsGetJSON(key, def) {
     try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch(e) { return def; }
   }
+
+  var CATEGORY_GROUPS = {
+    "Breakfast": ["Breakfast", "Bagels"],
+    "Entrees":   ["Entrees", "Burgers", "Chicken", "Chicken Breast", "Chicken Dippers",
+                  "Sandwiches", "Wraps", "Wraps & Tacos", "Bap", "Ciabatta", "Focaccia",
+                  "Toasties/ Croques", "Beef", "Seafood", "Wings", "Wings - Per Wing"],
+    "Salads":    ["Salads"],
+    "Sides":     ["Sides", "Beans", "Greens", "Rice", "Salsas", "Tortillas", "Vegetables"],
+    "Soups":     ["Soup", "Soups"],
+    "Snacks":    ["Appetizers", "Grab N Go", "Impulse Items", "Value",
+                  "Add-ons", "Modifiers", "Toppings", "Breads"],
+    "Desserts":  ["Desserts", "Desserts & Snacks", "Cookies", "Sweets",
+                  "Loaf Cakes", "Muffins & Donuts", "Bar cakes", "Bakery", "Treats"],
+    "Drinks":    ["Beverages", "Drinks", "Cold Coffee", "Espresso Drinks", "Frappuccino",
+                  "Hot Chocolates", "Hot Teas", "Tea Latte", "Protein Beverages",
+                  "Refreshments", "Promo Beverages", "Promo Beverages Alt Coffees",
+                  "Bottled Beverages", "Blonde and Decaf Cold Coffee",
+                  "Blonde and Decaf Espresso Drinks", "Blonde and Decaf Frappuccino"]
+  };
+  // Build a reverse lookup: raw category → group name
+  var _catGroupCache = null;
+  function _buildCatGroupCache() {
+    if (_catGroupCache) return _catGroupCache;
+    _catGroupCache = {};
+    Object.keys(CATEGORY_GROUPS).forEach(function (g) {
+      CATEGORY_GROUPS[g].forEach(function (c) { _catGroupCache[c] = g; });
+    });
+    return _catGroupCache;
+  }
+  function getCategoryGroup(rawCat) {
+    return _buildCatGroupCache()[rawCat] || "Other";
+  }
   var filters = {
     recMode:    lsGet("mm_rec_mode",           true),
     category:   lsGet("mm_filter_category",    ""),
@@ -820,9 +852,9 @@ window.MM.app = (function () {
     });
     return el("div", { class: "card rec-toggle-row" }, [
       el("div", { class: "toggle-label" }, [
-        el("span", { class: "toggle-text" }, "Recommendations"),
+        el("span", { class: "toggle-text" }, filters.recMode ? "Recommendations" : "All Menu Items"),
         el("span", { class: "toggle-sub muted small" },
-          filters.recMode ? "Ranked by your remaining macros" : "Browse items manually")
+          filters.recMode ? "Ranked for your remaining macros" : "Browse full menus unranked")
       ]),
       el("label", { class: "toggle-switch", for: "rec-mode-cb" }, [cb,
         el("span", { class: "toggle-track" }, [el("span", { class: "toggle-thumb" })])
@@ -908,19 +940,20 @@ window.MM.app = (function () {
     return wrap;
   }
 
-  // Categories present in the items of the given chainIds (or all chains if empty).
+  // Major category groups present in the items of the given chainIds (or all chains if empty).
   function getCatsForChains(chainIds, chains) {
     var pool = chainIds.length
       ? chains.filter(function (c) { return chainIds.indexOf(c.id) !== -1; })
       : chains;
-    var seen = {}, cats = [];
+    var seen = {};
     pool.forEach(function (c) {
       (c.items || []).forEach(function (it) {
-        if (it.category && !seen[it.category]) { seen[it.category] = true; cats.push(it.category); }
+        if (it.category) seen[getCategoryGroup(it.category)] = true;
       });
     });
-    cats.sort();
-    return cats;
+    // Return in a fixed display order
+    return ["Breakfast","Entrees","Salads","Sides","Soups","Snacks","Desserts","Drinks","Other"]
+      .filter(function (g) { return seen[g]; });
   }
 
   function clearAllFilters() {
@@ -939,7 +972,7 @@ window.MM.app = (function () {
       filters.chainIds.forEach(function (id) { chainSet[id] = true; });
       items = items.filter(function (it) { return chainSet[it.chainId]; });
     }
-    if (filters.category) items = items.filter(function (it) { return it.category === filters.category; });
+    if (filters.category) items = items.filter(function (it) { return getCategoryGroup(it.category) === filters.category; });
     if (filters.favorites) {
       var favMap = {};
       window.MM.store.getFavorites().forEach(function (f) { favMap[f.name] = true; });
@@ -1011,32 +1044,34 @@ window.MM.app = (function () {
 
       if (!items.length) { listWrap.appendChild(browseEmptyState()); window.scrollTo(0, savedY2); return; }
 
-      // Show plate builder only when exactly one chain with that type is selected
-      var chain = filters.chainIds.length === 1 ? window.MM.getChainById(filters.chainIds[0]) : null;
-      var chainCfg = chain && window.MM.getChainConfig(chain);
-      if (chainCfg && chainCfg.interaction_type === "plate_builder") {
-        var pbRoles = chainCfg.category_roles || {};
+      // Show plate builder card for any plate-builder chain in the active pool
+      activeChains.forEach(function (pbChain) {
+        var pbCfg = window.MM.getChainConfig(pbChain);
+        if (!pbCfg || pbCfg.interaction_type !== "plate_builder") return;
+        var pbRoles = pbCfg.category_roles || {};
         var pbRoleKeys = Object.keys(pbRoles);
-        var hasAnyRoleItems = pbRoleKeys.length === 0
-          ? chain.items.length > 0
+        var hasItems = pbRoleKeys.length === 0
+          ? pbChain.items.length > 0
           : pbRoleKeys.some(function (role) {
               var cats = pbRoles[role] || [];
-              return chain.items.some(function (it) { return cats.indexOf(it.category) !== -1; });
+              return pbChain.items.some(function (it) { return cats.indexOf(it.category) !== -1; });
             });
-        if (hasAnyRoleItems) {
-          listWrap.appendChild(el("div", { class: "card pb-entry-card" }, [
-            el("div", { class: "pb-entry-text" }, [
-              el("strong", null, "Build your order"),
-              el("div", { class: "muted small" }, "Pick a size and fill your slots. Live macros update as you build.")
-            ]),
-            el("button", { class: "btn primary", onclick: function () {
-              window.MM.plateBuilder.openPlateBuilder(chain, addToLog);
-            } }, "Open Builder →")
-          ]));
-        }
-      }
+        if (!hasItems) return;
+        listWrap.appendChild(el("div", { class: "card pb-entry-card" }, [
+          el("div", { class: "pb-entry-text" }, [
+            el("strong", null, pbChain.name + " — Build your order"),
+            el("div", { class: "muted small" }, "Pick a size and fill your slots. Live macros update as you build.")
+          ]),
+          el("button", { class: "btn primary", onclick: function () {
+            window.MM.plateBuilder.openPlateBuilder(pbChain, addToLog);
+          } }, "Open Builder →")
+        ]));
+      });
 
-      items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw, chain, chainCfg)); });
+      // Pass per-item chain/cfg for plate builder link in itemCard (single chain only)
+      var singleChain = activeChains.length === 1 ? activeChains[0] : null;
+      var singleCfg = singleChain ? window.MM.getChainConfig(singleChain) : null;
+      items.forEach(function (it) { listWrap.appendChild(itemCard(it, rem, draw, singleChain, singleCfg)); });
       window.scrollTo(0, savedY2);
     }
 
