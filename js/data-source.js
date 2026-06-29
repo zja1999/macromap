@@ -347,7 +347,8 @@ window.MM.data = (function () {
       var optInts = {};
       OPTIONAL_INT_COLS.forEach(function (col) {
         var raw = String(row[col] == null ? "" : row[col]).trim();
-        if (raw !== "") { var v = parseInt(raw, 10); if (!isNaN(v)) optInts[col] = v; }
+        var v = raw !== "" ? parseInt(raw, 10) : NaN;
+        optInts[col] = isNaN(v) ? null : v;
       });
       var servingLabel = String(row.serving_label == null ? "" : row.serving_label).trim() || null;
       var cat = String(row.category == null ? "" : row.category).trim() || null;
