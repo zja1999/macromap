@@ -2975,14 +2975,14 @@ window.MM.app = (function () {
     function goStep(n) { localStorage.setItem("mm_onboarding_step", String(n)); renderOnboarding(); }
 
     function stepHeader(num, title, sub) {
-      return el("div", { class: "onboard-header card" }, [
+      return el("div", { class: "onboard-discover-bar card" }, [
         el("div", { class: "onboard-steps" },
           [1, 2, 3].map(function (i) {
             return el("div", { class: "onboard-dot" + (i === num ? " active" : i < num ? " done" : "") });
           })
         ),
-        el("h2", null, title),
-        el("p", { class: "muted" }, sub)
+        el("strong", null, "Step " + num + " of 3 — " + title),
+        el("p", { class: "muted small", style: "margin:4px 0 0" }, sub)
       ]);
     }
 
@@ -3031,7 +3031,7 @@ window.MM.app = (function () {
           el("p", { class: "muted small", style: "margin:4px 0 12px" },
             "Use your location or search an address to find nearby chains. When you're ready, tap Done."),
           el("div", { class: "form-actions" }, [
-            el("button", { class: "btn primary", onclick: finishStep2 }, "Done →"),
+            el("button", { class: "btn primary", onclick: finishStep2 }, "Next →"),
             el("button", { class: "btn ghost", onclick: finishStep2 }, "Skip")
           ])
         ]);
@@ -3063,7 +3063,7 @@ window.MM.app = (function () {
           filters.recMode = true;
           saveFilter("mm_rec_mode", true);
           navigate("menu");
-        } }, "Start browsing →")
+        } }, "Done →")
       ]));
     }
   }
